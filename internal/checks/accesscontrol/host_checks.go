@@ -46,7 +46,7 @@ func CheckHostPath(resources *checks.DiscoveredResources) checks.CheckResult {
 	for i := range resources.Pods {
 		pod := &resources.Pods[i]
 		for _, vol := range pod.Spec.Volumes {
-			if vol.HostPath != nil {
+			if vol.HostPath != nil && vol.HostPath.Path != "" {
 				count++
 				result.Details = append(result.Details, checks.ResourceDetail{
 					Kind: "Pod", Name: pod.Name, Namespace: pod.Namespace,
