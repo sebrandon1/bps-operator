@@ -1,0 +1,10 @@
+apiVersion: bps.openshift.io/v1alpha1
+kind: BestPracticeScanner
+metadata:
+  name: my-scanner
+  namespace: default
+spec:
+  targetNamespace: default
+  scanInterval: "5m"
+  # checks: []  # empty or omit to run all checks
+  # suspend: false

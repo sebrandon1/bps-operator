@@ -1,0 +1,49 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: bps-operator-manager-role
+rules:
+  # Own CRDs
+  - apiGroups: ["bps.openshift.io"]
+    resources: ["bestpracticescanners"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["bps.openshift.io"]
+    resources: ["bestpracticescanners/status"]
+    verbs: ["get", "update", "patch"]
+  - apiGroups: ["bps.openshift.io"]
+    resources: ["bestpracticescanners/finalizers"]
+    verbs: ["update"]
+  - apiGroups: ["bps.openshift.io"]
+    resources: ["bestpracticeresults"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  # Scanned resources (read-only)
+  - apiGroups: [""]
+    resources: ["pods", "services", "serviceaccounts", "namespaces"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["rbac.authorization.k8s.io"]
+    resources: ["rolebindings", "clusterrolebindings"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["apiextensions.k8s.io"]
+    resources: ["customresourcedefinitions"]
+    verbs: ["get", "list", "watch"]
+  # Probe DaemonSet management
+  - apiGroups: ["apps"]
+    resources: ["daemonsets"]
+    verbs: ["get", "list", "watch", "create", "update", "delete"]
+  # Probe exec
+  - apiGroups: [""]
+    resources: ["pods/exec"]
+    verbs: ["create"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: bps-operator-manager-rolebinding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: bps-operator-manager-role
+subjects:
+  - kind: ServiceAccount
+    name: bps-operator-controller-manager
+    namespace: bps-operator-system
