@@ -48,7 +48,7 @@ func containerHasCapability(container *corev1.Container, capName string) bool {
 		return false
 	}
 	for _, cap := range container.SecurityContext.Capabilities.Add {
-		if strings.EqualFold(string(cap), capName) {
+		if strings.EqualFold(string(cap), "ALL") || strings.EqualFold(string(cap), capName) {
 			return true
 		}
 	}

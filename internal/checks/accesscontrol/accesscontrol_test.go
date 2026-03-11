@@ -451,6 +451,32 @@ func TestCheckSecurityContext_Privileged(t *testing.T) {
 	}
 }
 
+func TestCheckSysAdmin_AllCapability(t *testing.T) {
+	resources := &checks.DiscoveredResources{
+		Pods: []corev1.Pod{
+			{
+				ObjectMeta: metav1.ObjectMeta{Name: "pod1", Namespace: "ns1"},
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{
+						{
+							Name: "c1",
+							SecurityContext: &corev1.SecurityContext{
+								Capabilities: &corev1.Capabilities{
+									Add: []corev1.Capability{"ALL"},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+	result := CheckSysAdmin(resources)
+	if result.ComplianceStatus != "NonCompliant" {
+		t.Errorf("expected NonCompliant for ALL capability, got %s", result.ComplianceStatus)
+	}
+}
+
 func TestCheckCapabilities_AllTypes(t *testing.T) {
 	tests := []struct {
 		name    string
