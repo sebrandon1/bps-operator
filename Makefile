@@ -160,6 +160,14 @@ show-failures: ## Show details for all non-compliant results
 		-o jsonpath='{range .items[?(@.spec.complianceStatus=="NonCompliant")]}{.spec.checkName}{"\t"}{.spec.reason}{"\n"}{end}' 2>/dev/null \
 		| column -t -s $$'\t' || echo "No results found"
 
+.PHONY: show-scan-yaml
+show-scan-yaml: ## Print the one-shot scanner CR YAML
+	@cat config/samples/scanner_bps_test.yaml
+
+.PHONY: show-periodic-scan-yaml
+show-periodic-scan-yaml: ## Print the periodic scanner CR YAML
+	@cat config/samples/scanner_bps_test_periodic.yaml
+
 .PHONY: clean
 clean: undeploy-test uninstall ## Remove everything: test workloads, CRDs, namespace
 	$(KUBECTL) delete namespace $(TEST_NAMESPACE) --ignore-not-found
