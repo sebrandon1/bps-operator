@@ -1,0 +1,108 @@
+##
+## Test workloads for bps-operator.
+## Deploys a "good" pod (mostly compliant) and a "bad" pod (intentionally
+## non-compliant) into the bps-test namespace so the scanner has something
+## interesting to report on.
+##
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: bps-test
+---
+# ServiceAccount for the good pod
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: good-sa
+  namespace: bps-test
+automountServiceAccountToken: false
+---
+# A "good" pod — should be mostly compliant
+apiVersion: v1
+kind: Pod
+metadata:
+  name: good-pod
+  namespace: bps-test
+  labels:
+    app: good
+spec:
+  serviceAccountName: good-sa
+  automountServiceAccountToken: false
+  terminationGracePeriodSeconds: 0
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+  containers:
+    - name: app
+      image: registry.access.redhat.com/ubi9/ubi-minimal:latest
+      command: ["sleep", "infinity"]
+      terminationMessagePolicy: FallbackToLogsOnError
+      securityContext:
+        allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: true
+        capabilities:
+          drop: ["ALL"]
+      ports:
+        - containerPort: 8080
+---
+# A "bad" pod — intentionally non-compliant for testing
+apiVersion: v1
+kind: Pod
+metadata:
+  name: bad-pod
+  namespace: bps-test
+  labels:
+    app: bad
+spec:
+  # Uses default service account (non-compliant)
+  terminationGracePeriodSeconds: 0
+  hostPID: true
+  hostIPC: true
+  containers:
+    - name: bad-container
+      image: registry.access.redhat.com/ubi9/ubi-minimal:latest
+      command: ["sleep", "infinity"]
+      securityContext:
+        privileged: true
+        allowPrivilegeEscalation: true
+        capabilities:
+          add: ["SYS_ADMIN", "NET_ADMIN", "NET_RAW"]
+      ports:
+        - containerPort: 80
+          hostPort: 8888
+      volumeMounts:
+        - name: hostfs
+          mountPath: /host
+  volumes:
+    - name: hostfs
+      hostPath:
+        path: /tmp
+---
+# A NodePort service (non-compliant)
+apiVersion: v1
+kind: Service
+metadata:
+  name: bad-nodeport-svc
+  namespace: bps-test
+spec:
+  type: NodePort
+  selector:
+    app: bad
+  ports:
+    - port: 80
+      targetPort: 80
+      nodePort: 30080
+---
+# A ClusterIP service (compliant)
+apiVersion: v1
+kind: Service
+metadata:
+  name: good-clusterip-svc
+  namespace: bps-test
+spec:
+  type: ClusterIP
+  selector:
+    app: good
+  ports:
+    - port: 8080
+      targetPort: 8080

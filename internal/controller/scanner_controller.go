@@ -49,6 +49,22 @@ func (r *ScannerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		return ctrl.Result{}, err
 	}
 
+	// Skip if scan already completed and not yet time for the next one.
+	// This prevents a tight reconcile loop caused by the Owns watch on
+	// BestPracticeResult objects (every create/update triggers re-reconcile).
+	if scannerCR.Status.Phase == bpsv1alpha1.PhaseCompleted && scannerCR.Status.LastScanTime != nil {
+		if scannerCR.Spec.ScanInterval == "" {
+			// One-shot scan already done
+			return ctrl.Result{}, nil
+		}
+		interval, err := time.ParseDuration(scannerCR.Spec.ScanInterval)
+		if err == nil && time.Since(scannerCR.Status.LastScanTime.Time) < interval {
+			// Not yet time for the next periodic scan
+			requeueIn := time.Until(scannerCR.Status.LastScanTime.Add(interval))
+			return ctrl.Result{RequeueAfter: requeueIn}, nil
+		}
+	}
+
 	// Handle suspend
 	if scannerCR.Spec.Suspend {
 		if scannerCR.Status.Phase != bpsv1alpha1.PhaseIdle {
@@ -172,6 +188,11 @@ func (r *ScannerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	// Delete stale results
 	if err := r.deleteStaleResults(ctx, &scannerCR, resultNames); err != nil {
 		logger.Error(err, "Failed to clean up stale results")
+	}
+
+	// Re-fetch the scanner to avoid conflict errors from concurrent updates
+	if err := r.Get(ctx, req.NamespacedName, &scannerCR); err != nil {
+		return ctrl.Result{}, err
 	}
 
 	// Update status

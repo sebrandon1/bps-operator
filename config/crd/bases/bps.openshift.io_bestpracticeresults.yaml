@@ -1,0 +1,124 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.20.1
+  name: bestpracticeresults.bps.openshift.io
+spec:
+  group: bps.openshift.io
+  names:
+    kind: BestPracticeResult
+    listKind: BestPracticeResultList
+    plural: bestpracticeresults
+    singular: bestpracticeresult
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.checkName
+      name: Check
+      type: string
+    - jsonPath: .spec.complianceStatus
+      name: Status
+      type: string
+    - jsonPath: .spec.scannerRef
+      name: Scanner
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: BestPracticeResult is the Schema for the bestpracticeresults
+          API.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: BestPracticeResultSpec defines the observed result of a best
+              practice check.
+            properties:
+              category:
+                description: Category groups the check (e.g. "access-control", "observability").
+                type: string
+              checkName:
+                description: CheckName is the unique identifier for the check.
+                type: string
+              complianceStatus:
+                description: ComplianceStatus is the result of the check.
+                type: string
+              description:
+                description: Description explains what the check verifies.
+                type: string
+              details:
+                description: Details lists per-resource compliance information.
+                items:
+                  description: ResourceDetail describes a specific resource's compliance
+                    status.
+                  properties:
+                    compliant:
+                      description: Compliant indicates whether this specific resource
+                        is compliant.
+                      type: boolean
+                    kind:
+                      description: Kind of the Kubernetes resource.
+                      type: string
+                    message:
+                      description: Message provides details about the compliance status.
+                      type: string
+                    name:
+                      description: Name of the resource.
+                      type: string
+                    namespace:
+                      description: Namespace of the resource.
+                      type: string
+                  required:
+                  - compliant
+                  - kind
+                  - message
+                  - name
+                  - namespace
+                  type: object
+                type: array
+              reason:
+                description: Reason explains why the check has its current status.
+                type: string
+              remediation:
+                description: Remediation suggests how to fix non-compliance.
+                type: string
+              scannerRef:
+                description: ScannerRef is the name of the BestPracticeScanner that
+                  produced this result.
+                type: string
+              timestamp:
+                description: Timestamp is when the check was executed.
+                format: date-time
+                type: string
+            required:
+            - category
+            - checkName
+            - complianceStatus
+            - description
+            - scannerRef
+            - timestamp
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources: {}
