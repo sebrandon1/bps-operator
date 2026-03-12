@@ -71,9 +71,12 @@ run: install ## Run the operator locally against the current cluster
 
 ##@ Test Workloads
 
-.PHONY: deploy-test
-deploy-test: install ## Deploy test workloads + scanner into bps-test namespace
+# Helper: deploy test workloads and prepare namespace (no scanner CR)
+.PHONY: _deploy-test-workloads
+_deploy-test-workloads: install
 	@$(KUBECTL) delete pods -n $(TEST_NAMESPACE) --all --ignore-not-found 2>/dev/null || true
+	@$(KUBECTL) delete --ignore-not-found -f config/samples/scanner_bps_test.yaml 2>/dev/null || true
+	@$(KUBECTL) delete --ignore-not-found -f config/samples/scanner_bps_test_periodic.yaml 2>/dev/null || true
 	$(KUBECTL) apply -f config/samples/test-workloads.yaml
 	@if $(KUBECTL) api-resources 2>/dev/null | grep -q securitycontextconstraints; then \
 		echo "OpenShift detected — granting privileged SCC to default SA in $(TEST_NAMESPACE)"; \
@@ -81,22 +84,23 @@ deploy-test: install ## Deploy test workloads + scanner into bps-test namespace
 	fi
 	@echo "Waiting for namespace to be ready..."
 	@$(KUBECTL) wait --for=jsonpath='{.status.phase}'=Active namespace/$(TEST_NAMESPACE) --timeout=10s
+
+.PHONY: deploy-test
+deploy-test: _deploy-test-workloads ## Deploy test workloads only (no scanner CR)
+	@echo ""
+	@echo "Test workloads deployed to $(TEST_NAMESPACE)."
+	@echo "Use 'make deploy-scan' or 'make deploy-periodic-scan' to add a scanner."
+
+.PHONY: deploy-scan
+deploy-scan: _deploy-test-workloads ## Deploy test workloads + one-shot scanner into bps-test namespace
 	$(KUBECTL) apply -f config/samples/scanner_bps_test.yaml
 	@echo ""
-	@echo "Test workloads and scanner deployed to $(TEST_NAMESPACE)."
+	@echo "One-shot scanner deployed to $(TEST_NAMESPACE)."
 	@echo "Run 'make run' in another terminal to start the operator."
 	@echo "Then: $(KUBECTL) get bestpracticeresults -n $(TEST_NAMESPACE)"
 
 .PHONY: deploy-periodic-scan
-deploy-periodic-scan: install ## Deploy test workloads + periodic scanner (5m interval) into bps-test namespace
-	@$(KUBECTL) delete pods -n $(TEST_NAMESPACE) --all --ignore-not-found 2>/dev/null || true
-	$(KUBECTL) apply -f config/samples/test-workloads.yaml
-	@if $(KUBECTL) api-resources 2>/dev/null | grep -q securitycontextconstraints; then \
-		echo "OpenShift detected — granting privileged SCC to default SA in $(TEST_NAMESPACE)"; \
-		$(KUBECTL) adm policy add-scc-to-user privileged -z default -n $(TEST_NAMESPACE); \
-	fi
-	@echo "Waiting for namespace to be ready..."
-	@$(KUBECTL) wait --for=jsonpath='{.status.phase}'=Active namespace/$(TEST_NAMESPACE) --timeout=10s
+deploy-periodic-scan: _deploy-test-workloads ## Deploy test workloads + periodic scanner (5m interval) into bps-test namespace
 	$(KUBECTL) apply -f config/samples/scanner_bps_test_periodic.yaml
 	@echo ""
 	@echo "Periodic scanner deployed to $(TEST_NAMESPACE) (interval: 5m)."
@@ -114,7 +118,7 @@ undeploy-test: ## Remove test workloads, scanner, and bps-test namespace
 
 .PHONY: scan
 scan: install ## One-shot: deploy test workloads, run operator, show results, then stop
-	@$(MAKE) deploy-test
+	@$(MAKE) deploy-scan
 	@echo ""
 	@echo "Starting operator..."
 	@go run ./cmd/ --operator-namespace=$(OPERATOR_NAMESPACE) &>/tmp/bps-operator.log & \

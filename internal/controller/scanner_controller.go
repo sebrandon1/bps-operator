@@ -68,6 +68,22 @@ func (r *ScannerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		}
 	}
 
+	// Enforce one scanner per namespace
+	var scannerList bpsv1alpha1.BestPracticeScannerList
+	if err := r.List(ctx, &scannerList, client.InNamespace(scannerCR.Namespace)); err != nil {
+		return ctrl.Result{}, err
+	}
+	for i := range scannerList.Items {
+		other := &scannerList.Items[i]
+		if other.Name != scannerCR.Name && other.CreationTimestamp.Before(&scannerCR.CreationTimestamp) {
+			logger.Info("Another scanner already exists in this namespace, setting phase to Error",
+				"existing", other.Name)
+			scannerCR.Status.Phase = bpsv1alpha1.PhaseError
+			_ = r.Status().Update(ctx, &scannerCR)
+			return ctrl.Result{}, fmt.Errorf("namespace %s already has scanner %q; only one scanner per namespace is allowed", scannerCR.Namespace, other.Name)
+		}
+	}
+
 	// Handle suspend
 	if scannerCR.Spec.Suspend {
 		if scannerCR.Status.Phase != bpsv1alpha1.PhaseIdle {
