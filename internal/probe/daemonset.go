@@ -39,6 +39,21 @@ func EnsureDaemonSet(ctx context.Context, c client.Client, namespace string) err
 	return c.Update(ctx, &existing)
 }
 
+// DeleteDaemonSet removes the certsuite-probe DaemonSet from the given namespace.
+func DeleteDaemonSet(ctx context.Context, c client.Client, namespace string) error {
+	ds := &appsv1.DaemonSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      ProbeName,
+			Namespace: namespace,
+		},
+	}
+	err := c.Delete(ctx, ds)
+	if errors.IsNotFound(err) {
+		return nil
+	}
+	return err
+}
+
 // MapProbePods returns a map of node name to probe pod for all running probe pods.
 func MapProbePods(ctx context.Context, c client.Client, namespace string) (map[string]*corev1.Pod, error) {
 	var podList corev1.PodList

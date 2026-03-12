@@ -236,6 +236,16 @@ func (r *ScannerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	if requeueAfter > 0 {
 		return ctrl.Result{RequeueAfter: requeueAfter}, nil
 	}
+
+	// One-shot scan completed — tear down the probe DaemonSet
+	if r.OperatorNamespace != "" {
+		if err := probe.DeleteDaemonSet(ctx, r.Client, r.OperatorNamespace); err != nil {
+			logger.Error(err, "Failed to delete probe DaemonSet after one-shot scan")
+		} else {
+			logger.Info("Probe DaemonSet deleted after one-shot scan")
+		}
+	}
+
 	return ctrl.Result{}, nil
 }
 
