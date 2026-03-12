@@ -86,6 +86,8 @@ Records the outcome of a single check.
 | `make scan` | One-shot: deploy test workloads, run operator, show results, stop |
 | `make show-results` | Show scan results from the cluster |
 | `make show-failures` | Show details for all non-compliant results |
+| `make show-scan-yaml` | Print the one-shot scanner CR YAML |
+| `make show-periodic-scan-yaml` | Print the periodic scanner CR YAML |
 | `make clean` | Remove everything: test workloads, CRDs, namespace |
 | `make build-image` | Build container image |
 | `make manifests` | Regenerate CRD and RBAC manifests |
