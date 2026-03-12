@@ -91,7 +91,7 @@ func TestReconcile_FullScan(t *testing.T) {
 	scanner := &bpsv1alpha1.BestPracticeScanner{
 		ObjectMeta: metav1.ObjectMeta{Name: "scanner", Namespace: "ns"},
 		Spec: bpsv1alpha1.BestPracticeScannerSpec{
-			Checks: []string{"access-control-host-network"},
+			Checks: []string{"access-control-pod-host-network"},
 		},
 	}
 
@@ -123,8 +123,8 @@ func TestReconcile_FullScan(t *testing.T) {
 	}
 
 	result := resultList.Items[0]
-	if result.Spec.CheckName != "access-control-host-network" {
-		t.Errorf("expected check name access-control-host-network, got %s", result.Spec.CheckName)
+	if result.Spec.CheckName != "access-control-pod-host-network" {
+		t.Errorf("expected check name access-control-pod-host-network, got %s", result.Spec.CheckName)
 	}
 	if result.Spec.ComplianceStatus != bpsv1alpha1.StatusCompliant {
 		t.Errorf("expected Compliant, got %s", result.Spec.ComplianceStatus)
@@ -153,7 +153,7 @@ func TestReconcile_NonCompliant(t *testing.T) {
 	scanner := &bpsv1alpha1.BestPracticeScanner{
 		ObjectMeta: metav1.ObjectMeta{Name: "scanner", Namespace: "ns"},
 		Spec: bpsv1alpha1.BestPracticeScannerSpec{
-			Checks: []string{"access-control-host-network"},
+			Checks: []string{"access-control-pod-host-network"},
 		},
 	}
 
@@ -195,7 +195,7 @@ func TestReconcile_WithScanInterval(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Name: "scanner", Namespace: "ns"},
 		Spec: bpsv1alpha1.BestPracticeScannerSpec{
 			ScanInterval: "10m",
-			Checks:       []string{"access-control-host-network"},
+			Checks:       []string{"access-control-pod-host-network"},
 		},
 	}
 
