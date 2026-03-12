@@ -1,6 +1,7 @@
 IMG ?= quay.io/redhat-best-practices-for-k8s/bps-operator:latest
 OPERATOR_NAMESPACE ?= bps-operator-system
 TEST_NAMESPACE ?= bps-test
+KIND_CLUSTER_NAME ?= kind
 
 # Use oc if available, fall back to kubectl
 KUBECTL ?= $(shell command -v oc 2>/dev/null || echo kubectl)
@@ -32,6 +33,38 @@ generate:
 .PHONY: manifests
 manifests:
 	controller-gen rbac:roleName=manager-role crd webhook paths="./..." output:crd:artifacts:config=config/crd/bases
+
+.PHONY: test-e2e
+test-e2e: build-image ## Run e2e tests against a Kind cluster
+	@echo "Loading image into Kind cluster..."
+	kind load docker-image $(IMG) --name $(KIND_CLUSTER_NAME)
+	$(MAKE) deploy
+	$(KUBECTL) set image deployment/bps-operator-controller-manager manager=$(IMG) -n $(OPERATOR_NAMESPACE)
+	$(KUBECTL) patch deployment bps-operator-controller-manager -n $(OPERATOR_NAMESPACE) \
+		-p '{"spec":{"template":{"spec":{"containers":[{"name":"manager","imagePullPolicy":"IfNotPresent"}]}}}}'
+	@echo "Waiting for operator to be ready..."
+	$(KUBECTL) rollout status deployment/bps-operator-controller-manager -n $(OPERATOR_NAMESPACE) --timeout=120s
+	$(KUBECTL) apply -f config/samples/test-workloads.yaml
+	$(KUBECTL) wait --for=jsonpath='{.status.phase}'=Active namespace/$(TEST_NAMESPACE) --timeout=10s
+	$(KUBECTL) apply -f config/samples/scanner_bps_test.yaml
+	@echo "Waiting for scan to complete..."
+	@for i in $$(seq 1 90); do \
+		PHASE=$$($(KUBECTL) get bestpracticescanners test-scanner -n $(TEST_NAMESPACE) -o jsonpath='{.status.phase}' 2>/dev/null); \
+		if [ "$$PHASE" = "Completed" ]; then echo "Scan completed."; break; fi; \
+		if [ $$i -eq 90 ]; then \
+			echo "Timed out waiting for scan (phase: $$PHASE)"; \
+			echo "=== Operator Logs ==="; \
+			$(KUBECTL) logs deployment/bps-operator-controller-manager -n $(OPERATOR_NAMESPACE) --tail=50 2>/dev/null || true; \
+			echo "=== Scanner Status ==="; \
+			$(KUBECTL) get bestpracticescanners test-scanner -n $(TEST_NAMESPACE) -o yaml 2>/dev/null || true; \
+			echo "=== Pod Status ==="; \
+			$(KUBECTL) get pods -A 2>/dev/null || true; \
+			exit 1; \
+		fi; \
+		sleep 2; \
+	done
+	@echo "=== E2E Results ==="
+	@$(KUBECTL) get bestpracticeresults -n $(TEST_NAMESPACE)
 
 .PHONY: build-image
 build-image:

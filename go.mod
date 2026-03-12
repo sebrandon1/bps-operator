@@ -1,6 +1,6 @@
 module github.com/sebrandon1/bps-operator
 
-go 1.24.0
+go 1.26.1
 
 require (
 	k8s.io/api v0.32.3

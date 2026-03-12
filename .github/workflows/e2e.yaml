@@ -1,0 +1,40 @@
+name: E2E Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: "0 4 * * *" # Nightly at 04:00 UTC
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions: read-all
+
+jobs:
+  e2e:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Setup Go
+        uses: actions/setup-go@4b73464bb391d4059bd26b0524d20df3927bd417 # v6.3.0
+        with:
+          go-version-file: go.mod
+
+      - name: Install controller-gen
+        run: go install sigs.k8s.io/controller-tools/cmd/controller-gen@latest
+
+      - name: Create Kubernetes cluster
+        uses: palmsoftware/quick-k8s@2c50b3118203c1e1ce511c9306e25eec83a619be # v0.0.58
+        with:
+          numControlPlaneNodes: 1
+          numWorkerNodes: 1
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Run e2e tests
+        run: make test-e2e IMG=quay.io/redhat-best-practices-for-k8s/bps-operator:e2e
