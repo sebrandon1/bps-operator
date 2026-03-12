@@ -1,0 +1,8 @@
+apiVersion: bps.openshift.io/v1alpha1
+kind: BestPracticeScanner
+metadata:
+  name: test-scanner-periodic
+  namespace: bps-test
+spec:
+  targetNamespace: bps-test
+  scanInterval: "5m"

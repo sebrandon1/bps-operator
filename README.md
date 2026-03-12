@@ -80,7 +80,8 @@ Records the outcome of a single check.
 | `make install` | Install CRDs onto the cluster |
 | `make run` | Run the operator locally against the current cluster |
 | `make deploy` | Deploy operator to the cluster (CRDs + RBAC + manager) |
-| `make deploy-test` | Deploy test workloads and scanner into `bps-test` namespace |
+| `make deploy-test` | Deploy test workloads and one-shot scanner into `bps-test` namespace |
+| `make deploy-periodic-scan` | Deploy test workloads and periodic scanner (5m interval) into `bps-test` namespace |
 | `make scan` | One-shot: deploy test workloads, run operator, show results, stop |
 | `make show-results` | Show scan results from the cluster |
 | `make show-failures` | Show details for all non-compliant results |
