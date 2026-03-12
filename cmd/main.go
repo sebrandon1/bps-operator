@@ -20,7 +20,11 @@ import (
 
 	// Register checks via init()
 	_ "github.com/sebrandon1/bps-operator/internal/checks/accesscontrol"
+	_ "github.com/sebrandon1/bps-operator/internal/checks/lifecycle"
+	_ "github.com/sebrandon1/bps-operator/internal/checks/manageability"
+	_ "github.com/sebrandon1/bps-operator/internal/checks/networking"
 	_ "github.com/sebrandon1/bps-operator/internal/checks/observability"
+	_ "github.com/sebrandon1/bps-operator/internal/checks/performance"
 	_ "github.com/sebrandon1/bps-operator/internal/checks/platform"
 )
 

@@ -46,6 +46,9 @@ type BestPracticeResultSpec struct {
 	// Remediation suggests how to fix non-compliance.
 	// +optional
 	Remediation string `json:"remediation,omitempty"`
+	// CatalogURL links to the certsuite CATALOG.md entry for this check.
+	// +optional
+	CatalogURL string `json:"catalogURL,omitempty"`
 	// Details lists per-resource compliance information.
 	// +optional
 	Details []ResourceDetail `json:"details,omitempty"`
@@ -54,6 +57,7 @@ type BestPracticeResultSpec struct {
 }
 
 // +kubebuilder:object:root=true
+// +kubebuilder:resource:shortName=bpr
 // +kubebuilder:printcolumn:name="Check",type=string,JSONPath=`.spec.checkName`
 // +kubebuilder:printcolumn:name="Status",type=string,JSONPath=`.spec.complianceStatus`
 // +kubebuilder:printcolumn:name="Scanner",type=string,JSONPath=`.spec.scannerRef`

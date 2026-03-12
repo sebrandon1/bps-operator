@@ -11,12 +11,17 @@ spec:
     kind: BestPracticeScanner
     listKind: BestPracticeScannerList
     plural: bestpracticescanners
+    shortNames:
+    - bps
     singular: bestpracticescanner
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
     - jsonPath: .status.phase
       name: Phase
+      type: string
+    - jsonPath: .spec.scanInterval
+      name: Interval
       type: string
     - jsonPath: .status.summary.compliant
       name: Compliant

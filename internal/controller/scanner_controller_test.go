@@ -4,7 +4,12 @@ import (
 	"context"
 	"testing"
 
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	networkingv1 "k8s.io/api/networking/v1"
+	policyv1 "k8s.io/api/policy/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
+	storagev1 "k8s.io/api/storage/v1"
 	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -12,8 +17,6 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
-
-	rbacv1 "k8s.io/api/rbac/v1"
 
 	bpsv1alpha1 "github.com/sebrandon1/bps-operator/api/v1alpha1"
 
@@ -26,6 +29,10 @@ func newScheme() *runtime.Scheme {
 	s := runtime.NewScheme()
 	_ = corev1.AddToScheme(s)
 	_ = rbacv1.AddToScheme(s)
+	_ = appsv1.AddToScheme(s)
+	_ = networkingv1.AddToScheme(s)
+	_ = policyv1.AddToScheme(s)
+	_ = storagev1.AddToScheme(s)
 	_ = apiextv1.AddToScheme(s)
 	_ = bpsv1alpha1.AddToScheme(s)
 	return s

@@ -8,7 +8,10 @@ rules:
   - ""
   resources:
   - namespaces
+  - nodes
+  - persistentvolumes
   - pods
+  - resourcequotas
   - serviceaccounts
   - services
   verbs:
@@ -33,6 +36,8 @@ rules:
   - apps
   resources:
   - daemonsets
+  - deployments
+  - statefulsets
   verbs:
   - create
   - delete
@@ -68,10 +73,34 @@ rules:
   - patch
   - update
 - apiGroups:
+  - networking.k8s.io
+  resources:
+  - networkpolicies
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - policy
+  resources:
+  - poddisruptionbudgets
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
   - rbac.authorization.k8s.io
   resources:
   - clusterrolebindings
   - rolebindings
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - storage.k8s.io
+  resources:
+  - storageclasses
   verbs:
   - get
   - list

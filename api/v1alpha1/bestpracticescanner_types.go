@@ -69,7 +69,9 @@ type BestPracticeScannerStatus struct {
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
+// +kubebuilder:resource:shortName=bps
 // +kubebuilder:printcolumn:name="Phase",type=string,JSONPath=`.status.phase`
+// +kubebuilder:printcolumn:name="Interval",type=string,JSONPath=`.spec.scanInterval`,priority=0
 // +kubebuilder:printcolumn:name="Compliant",type=integer,JSONPath=`.status.summary.compliant`
 // +kubebuilder:printcolumn:name="NonCompliant",type=integer,JSONPath=`.status.summary.nonCompliant`
 // +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`

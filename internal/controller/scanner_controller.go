@@ -31,11 +31,14 @@ type ScannerReconciler struct {
 // +kubebuilder:rbac:groups=bps.openshift.io,resources=bestpracticescanners/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=bps.openshift.io,resources=bestpracticescanners/finalizers,verbs=update
 // +kubebuilder:rbac:groups=bps.openshift.io,resources=bestpracticeresults,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups="",resources=pods;services;serviceaccounts;namespaces,verbs=get;list;watch
+// +kubebuilder:rbac:groups="",resources=pods;services;serviceaccounts;namespaces;nodes;persistentvolumes;resourcequotas,verbs=get;list;watch
 // +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=rolebindings;clusterrolebindings,verbs=get;list;watch
 // +kubebuilder:rbac:groups=apiextensions.k8s.io,resources=customresourcedefinitions,verbs=get;list;watch
-// +kubebuilder:rbac:groups=apps,resources=daemonsets,verbs=get;list;watch;create;update;delete
+// +kubebuilder:rbac:groups=apps,resources=daemonsets;deployments;statefulsets,verbs=get;list;watch;create;update;delete
 // +kubebuilder:rbac:groups="",resources=pods/exec,verbs=create
+// +kubebuilder:rbac:groups=networking.k8s.io,resources=networkpolicies,verbs=get;list;watch
+// +kubebuilder:rbac:groups=policy,resources=poddisruptionbudgets,verbs=get;list;watch
+// +kubebuilder:rbac:groups=storage.k8s.io,resources=storageclasses,verbs=get;list;watch
 
 func (r *ScannerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
@@ -164,6 +167,11 @@ func (r *ScannerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 				})
 			}
 
+			var catalogURL string
+			if check.CatalogID != "" {
+				catalogURL = "https://github.com/redhat-best-practices-for-k8s/certsuite/blob/main/CATALOG.md#" + check.CatalogID
+			}
+
 			result.Spec = bpsv1alpha1.BestPracticeResultSpec{
 				ScannerRef:       scannerCR.Name,
 				CheckName:        check.Name,
@@ -172,6 +180,7 @@ func (r *ScannerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 				ComplianceStatus: bpsv1alpha1.ComplianceStatus(checkResult.ComplianceStatus),
 				Reason:           checkResult.Reason,
 				Remediation:      check.Remediation,
+				CatalogURL:       catalogURL,
 				Details:          apiDetails,
 				Timestamp:        now,
 			}

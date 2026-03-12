@@ -11,6 +11,8 @@ spec:
     kind: BestPracticeResult
     listKind: BestPracticeResultList
     plural: bestpracticeresults
+    shortNames:
+    - bpr
     singular: bestpracticeresult
   scope: Namespaced
   versions:
@@ -54,6 +56,10 @@ spec:
             description: BestPracticeResultSpec defines the observed result of a best
               practice check.
             properties:
+              catalogURL:
+                description: CatalogURL links to the certsuite CATALOG.md entry for
+                  this check.
+                type: string
               category:
                 description: Category groups the check (e.g. "access-control", "observability").
                 type: string
