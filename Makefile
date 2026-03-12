@@ -73,6 +73,7 @@ run: install ## Run the operator locally against the current cluster
 
 .PHONY: deploy-test
 deploy-test: install ## Deploy test workloads + scanner into bps-test namespace
+	@$(KUBECTL) delete pods -n $(TEST_NAMESPACE) --all --ignore-not-found 2>/dev/null || true
 	$(KUBECTL) apply -f config/samples/test-workloads.yaml
 	@if $(KUBECTL) api-resources 2>/dev/null | grep -q securitycontextconstraints; then \
 		echo "OpenShift detected — granting privileged SCC to default SA in $(TEST_NAMESPACE)"; \
