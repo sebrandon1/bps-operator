@@ -14,7 +14,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	bpsv1alpha1 "github.com/sebrandon1/bps-operator/api/v1alpha1"
-	"github.com/sebrandon1/bps-operator/internal/checks"
+	"github.com/redhat-best-practices-for-k8s/checks"
 	"github.com/sebrandon1/bps-operator/internal/probe"
 	"github.com/sebrandon1/bps-operator/internal/scanner"
 )

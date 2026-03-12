@@ -19,13 +19,14 @@ import (
 	"github.com/sebrandon1/bps-operator/internal/probe"
 
 	// Register checks via init()
-	_ "github.com/sebrandon1/bps-operator/internal/checks/accesscontrol"
-	_ "github.com/sebrandon1/bps-operator/internal/checks/lifecycle"
-	_ "github.com/sebrandon1/bps-operator/internal/checks/manageability"
-	_ "github.com/sebrandon1/bps-operator/internal/checks/networking"
-	_ "github.com/sebrandon1/bps-operator/internal/checks/observability"
-	_ "github.com/sebrandon1/bps-operator/internal/checks/performance"
-	_ "github.com/sebrandon1/bps-operator/internal/checks/platform"
+	_ "github.com/redhat-best-practices-for-k8s/checks/accesscontrol"
+	_ "github.com/redhat-best-practices-for-k8s/checks/lifecycle"
+	_ "github.com/redhat-best-practices-for-k8s/checks/manageability"
+	_ "github.com/redhat-best-practices-for-k8s/checks/networking"
+	_ "github.com/redhat-best-practices-for-k8s/checks/observability"
+	_ "github.com/redhat-best-practices-for-k8s/checks/operator"
+	_ "github.com/redhat-best-practices-for-k8s/checks/performance"
+	_ "github.com/redhat-best-practices-for-k8s/checks/platform"
 )
 
 var (

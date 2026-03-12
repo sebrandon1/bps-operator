@@ -13,7 +13,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	"github.com/sebrandon1/bps-operator/internal/checks"
+	"github.com/redhat-best-practices-for-k8s/checks"
 )
 
 // Discover lists all relevant resources in the target namespace.

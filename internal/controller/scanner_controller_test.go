@@ -21,8 +21,8 @@ import (
 	bpsv1alpha1 "github.com/sebrandon1/bps-operator/api/v1alpha1"
 
 	// Register checks
-	_ "github.com/sebrandon1/bps-operator/internal/checks/accesscontrol"
-	_ "github.com/sebrandon1/bps-operator/internal/checks/observability"
+	_ "github.com/redhat-best-practices-for-k8s/checks/accesscontrol"
+	_ "github.com/redhat-best-practices-for-k8s/checks/observability"
 )
 
 func newScheme() *runtime.Scheme {
@@ -49,7 +49,7 @@ func TestReconcile_ScannerNotFound(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if result.Requeue {
+	if result.RequeueAfter != 0 {
 		t.Error("unexpected requeue")
 	}
 }
@@ -73,7 +73,7 @@ func TestReconcile_Suspend(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if result.Requeue {
+	if result.RequeueAfter != 0 {
 		t.Error("unexpected requeue")
 	}
 
