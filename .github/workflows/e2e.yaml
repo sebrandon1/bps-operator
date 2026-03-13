@@ -14,9 +14,6 @@ concurrency:
 
 permissions: read-all
 
-env:
-  GOPRIVATE: github.com/redhat-best-practices-for-k8s/checks
-
 jobs:
   e2e:
     runs-on: ubuntu-24.04
@@ -29,7 +26,6 @@ jobs:
         with:
           repository: redhat-best-practices-for-k8s/checks
           path: checks-lib
-          token: ${{ secrets.CHECKS_REPO_TOKEN }}
 
       - name: Setup Go
         uses: actions/setup-go@4b73464bb391d4059bd26b0524d20df3927bd417 # v6.3.0
