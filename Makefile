@@ -66,9 +66,17 @@ test-e2e: build-image ## Run e2e tests against a Kind cluster
 	@echo "=== E2E Results ==="
 	@$(KUBECTL) get bestpracticeresults -n $(TEST_NAMESPACE)
 
+CHECKS_DIR ?= $(shell cd ../../redhat-best-practices-for-k8s/checks 2>/dev/null && pwd)
+
 .PHONY: build-image
 build-image:
+	@if [ -z "$(CHECKS_DIR)" ] || [ ! -d "$(CHECKS_DIR)" ]; then \
+		echo "ERROR: checks library not found. Set CHECKS_DIR to the path of the checks module."; \
+		exit 1; \
+	fi
+	rm -rf .checks-vendor && cp -r $(CHECKS_DIR) .checks-vendor
 	docker build -t $(IMG) .
+	rm -rf .checks-vendor
 
 .PHONY: push-image
 push-image:
