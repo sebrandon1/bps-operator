@@ -46,11 +46,5 @@ jobs:
           numWorkerNodes: 1
           github_token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and load image
-        run: |
-          cp -r checks-lib .checks-vendor
-          docker build -t quay.io/redhat-best-practices-for-k8s/bps-operator:e2e .
-          rm -rf .checks-vendor
-
       - name: Run e2e tests
-        run: make test-e2e IMG=quay.io/redhat-best-practices-for-k8s/bps-operator:e2e
+        run: make test-e2e IMG=quay.io/redhat-best-practices-for-k8s/bps-operator:e2e CHECKS_DIR=${{ github.workspace }}/checks-lib
