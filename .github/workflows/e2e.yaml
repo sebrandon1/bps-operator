@@ -14,6 +14,9 @@ concurrency:
 
 permissions: read-all
 
+env:
+  GOPRIVATE: github.com/redhat-best-practices-for-k8s/checks
+
 jobs:
   e2e:
     runs-on: ubuntu-24.04
@@ -21,10 +24,21 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
+      - name: Checkout checks library
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          repository: redhat-best-practices-for-k8s/checks
+          path: checks-lib
+          token: ${{ secrets.CHECKS_REPO_TOKEN }}
+
       - name: Setup Go
         uses: actions/setup-go@4b73464bb391d4059bd26b0524d20df3927bd417 # v6.3.0
         with:
           go-version-file: go.mod
+
+      - name: Configure replace directive for CI
+        run: |
+          go mod edit -replace github.com/redhat-best-practices-for-k8s/checks=${{ github.workspace }}/checks-lib
 
       - name: Install controller-gen
         run: go install sigs.k8s.io/controller-tools/cmd/controller-gen@latest
@@ -35,6 +49,12 @@ jobs:
           numControlPlaneNodes: 1
           numWorkerNodes: 1
           github_token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and load image
+        run: |
+          cp -r checks-lib .checks-vendor
+          docker build -t quay.io/redhat-best-practices-for-k8s/bps-operator:e2e .
+          rm -rf .checks-vendor
 
       - name: Run e2e tests
         run: make test-e2e IMG=quay.io/redhat-best-practices-for-k8s/bps-operator:e2e

@@ -7,6 +7,9 @@ on:
     types: [published]
   workflow_dispatch:
 
+env:
+  GOPRIVATE: github.com/redhat-best-practices-for-k8s/checks
+
 jobs:
   build-and-push:
     runs-on: ubuntu-24.04
@@ -14,6 +17,16 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Checkout checks library
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          repository: redhat-best-practices-for-k8s/checks
+          path: checks-lib
+          token: ${{ secrets.CHECKS_REPO_TOKEN }}
+
+      - name: Vendor checks library for build context
+        run: cp -r checks-lib .checks-vendor
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@ce360397dd3f832beb865e1373c09c0e9f86d70a # v4.0.0

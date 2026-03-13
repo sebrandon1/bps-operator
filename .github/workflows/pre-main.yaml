@@ -10,6 +10,9 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
+env:
+  GOPRIVATE: github.com/redhat-best-practices-for-k8s/checks
+
 jobs:
   lint:
     runs-on: ubuntu-24.04
@@ -17,10 +20,21 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
+      - name: Checkout checks library
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          repository: redhat-best-practices-for-k8s/checks
+          path: checks-lib
+          token: ${{ secrets.CHECKS_REPO_TOKEN }}
+
       - name: Setup Go
         uses: actions/setup-go@4b73464bb391d4059bd26b0524d20df3927bd417 # v6.3.0
         with:
           go-version-file: go.mod
+
+      - name: Configure replace directive for CI
+        run: |
+          go mod edit -replace github.com/redhat-best-practices-for-k8s/checks=${{ github.workspace }}/checks-lib
 
       - name: golangci-lint
         uses: golangci/golangci-lint-action@1e7e51e771db61008b38414a730f564565cf7c20 # v9.2.0
@@ -42,10 +56,21 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
+      - name: Checkout checks library
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          repository: redhat-best-practices-for-k8s/checks
+          path: checks-lib
+          token: ${{ secrets.CHECKS_REPO_TOKEN }}
+
       - name: Setup Go
         uses: actions/setup-go@4b73464bb391d4059bd26b0524d20df3927bd417 # v6.3.0
         with:
           go-version-file: go.mod
+
+      - name: Configure replace directive for CI
+        run: |
+          go mod edit -replace github.com/redhat-best-practices-for-k8s/checks=${{ github.workspace }}/checks-lib
 
       - name: Run tests
         run: make test
@@ -71,13 +96,27 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
+      - name: Checkout checks library
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          repository: redhat-best-practices-for-k8s/checks
+          path: checks-lib
+          token: ${{ secrets.CHECKS_REPO_TOKEN }}
+
       - name: Setup Go
         uses: actions/setup-go@4b73464bb391d4059bd26b0524d20df3927bd417 # v6.3.0
         with:
           go-version-file: go.mod
 
+      - name: Configure replace directive for CI
+        run: |
+          go mod edit -replace github.com/redhat-best-practices-for-k8s/checks=${{ github.workspace }}/checks-lib
+
       - name: Build binary
         run: make build
 
       - name: Build container image
-        run: docker build -t bps-operator:ci .
+        run: |
+          cp -r checks-lib .checks-vendor
+          docker build -t bps-operator:ci .
+          rm -rf .checks-vendor
