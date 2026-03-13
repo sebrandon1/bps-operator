@@ -3,15 +3,13 @@ module github.com/sebrandon1/bps-operator
 go 1.26.1
 
 require (
-	github.com/redhat-best-practices-for-k8s/checks v0.0.0-20260312225410-737cb9d34086
-	k8s.io/api v0.35.1
-	k8s.io/apiextensions-apiserver v0.35.1
-	k8s.io/apimachinery v0.35.1
-	k8s.io/client-go v0.35.1
+	github.com/redhat-best-practices-for-k8s/checks v0.0.1
+	k8s.io/api v0.35.2
+	k8s.io/apiextensions-apiserver v0.35.2
+	k8s.io/apimachinery v0.35.2
+	k8s.io/client-go v0.35.2
 	sigs.k8s.io/controller-runtime v0.23.1
 )
-
-replace github.com/redhat-best-practices-for-k8s/checks => ../../redhat-best-practices-for-k8s/checks
 
 require (
 	github.com/beorn7/perks v1.0.1 // indirect
