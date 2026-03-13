@@ -7,7 +7,7 @@ COPY .checks-vendor/ /redhat-best-practices-for-k8s/checks/
 
 COPY go.mod go.sum ./
 # Adjust the replace directive for the container build context
-RUN sed -i 's|../../redhat-best-practices-for-k8s/checks|/redhat-best-practices-for-k8s/checks|' go.mod && \
+RUN sed -i 's|=> .*|=> /redhat-best-practices-for-k8s/checks|' go.mod && \
     go mod download
 COPY . .
 RUN CGO_ENABLED=0 GOOS=linux go build -a -o manager ./cmd/
