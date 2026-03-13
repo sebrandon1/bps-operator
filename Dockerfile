@@ -5,12 +5,11 @@ WORKDIR /workspace
 # Copy the checks library (local replace dependency)
 COPY .checks-vendor/ /redhat-best-practices-for-k8s/checks/
 
-COPY go.mod go.sum ./
+COPY . .
 # Adjust the replace directive for the container build context
 RUN sed -i 's|=> .*|=> /redhat-best-practices-for-k8s/checks|' go.mod && \
-    go mod download
-COPY . .
-RUN CGO_ENABLED=0 GOOS=linux go build -a -o manager ./cmd/
+    go mod download && \
+    CGO_ENABLED=0 GOOS=linux go build -a -o manager ./cmd/
 
 FROM gcr.io/distroless/static:nonroot
 WORKDIR /
