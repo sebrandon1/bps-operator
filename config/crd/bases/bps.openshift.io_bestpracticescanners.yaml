@@ -112,8 +112,12 @@ spec:
                 type: object
                 x-kubernetes-map-type: atomic
               scanInterval:
-                description: ScanInterval defines the interval between periodic scans
-                  (e.g. "5m"). Omit for one-shot.
+                description: |-
+                  ScanInterval defines the interval between periodic scans. Omit for one-shot scans.
+                  Must be a valid Go duration string (e.g., "5m", "1h30m", "10s").
+                  Valid time units: ns, us (µs), ms, s, m, h
+                  Examples: "30s", "5m", "1h", "1h30m"
+                  Invalid examples: "5mins" (use "5m"), "1 hour" (use "1h"), "5" (no unit)
                 pattern: ^([0-9]+(\.[0-9]+)?(ns|us|µs|ms|s|m|h))+$
                 type: string
               suspend:
