@@ -1,4 +1,4 @@
-IMG ?= quay.io/redhat-best-practices-for-k8s/bps-operator:latest
+IMG ?= quay.io/bapalm/bps-operator:latest
 OPERATOR_NAMESPACE ?= bps-operator-system
 TEST_NAMESPACE ?= bps-test
 KIND_CLUSTER_NAME ?= kind
