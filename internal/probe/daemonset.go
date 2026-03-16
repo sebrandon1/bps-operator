@@ -1,3 +1,48 @@
+// Package probe manages the certsuite-probe DaemonSet, which provides node-level
+// access for compliance checks that require inspection of host configurations.
+//
+// # Security Model
+//
+// The probe runs with elevated privileges (privileged container, host namespaces,
+// host root filesystem mount) to enable checks that verify node-level configurations.
+// This is required for checks such as:
+//   - Kernel parameter verification (sysctl settings)
+//   - Host file inspection (/etc, /proc, /sys)
+//   - Network configuration validation
+//   - Container runtime inspection
+//   - Security context validation
+//
+// # Security Boundaries
+//
+//  1. Namespace Isolation: Pods run in the operator namespace only, not in user namespaces
+//     being scanned. This prevents privilege escalation in user workload namespaces.
+//
+//  2. Read-Only Host Mount: The host root filesystem is mounted read-only at /host,
+//     preventing any modifications to the node.
+//
+//  3. No Automated Execution: The container runs "sleep infinity" with no automated
+//     code execution. Commands are executed only via explicit Kubernetes RBAC-controlled
+//     pods/exec API calls.
+//
+//  4. Execution Timeout: All probe commands have a 30-second timeout to prevent
+//     runaway processes or resource exhaustion.
+//
+//  5. Trusted Image: The probe image (certsuite-probe) is maintained by the Red Hat
+//     Best Practices team and contains only standard Linux utilities for inspection.
+//     No custom binaries or scripts are included.
+//
+//  6. Explicit RBAC: Operators must grant pods/exec permissions explicitly. This
+//     provides an audit trail of who can execute commands via the probe.
+//
+// # Checks Requiring Probe Access
+//
+// The following check categories require node-level access:
+//   - platform: Node configuration, kernel parameters, OS details
+//   - networking: iptables rules, routing tables, network interfaces
+//   - performance: CPU governor, NUMA configuration, hugepages
+//
+// Checks that only inspect Kubernetes API objects (pods, services, etc.) do not
+// require probe access and run directly in the operator.
 package probe
 
 import (
@@ -74,6 +119,10 @@ func MapProbePods(ctx context.Context, c client.Client, namespace string) (map[s
 	return result, nil
 }
 
+// desiredDaemonSet constructs the certsuite-probe DaemonSet specification.
+//
+// The DaemonSet runs with elevated privileges to enable node-level compliance checks.
+// See package documentation for security model and justification.
 func desiredDaemonSet(namespace string) *appsv1.DaemonSet {
 	privileged := true
 	hostPathDir := corev1.HostPathDirectory
@@ -90,9 +139,12 @@ func desiredDaemonSet(namespace string) *appsv1.DaemonSet {
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{Labels: labels},
 				Spec: corev1.PodSpec{
+					// HostNetwork: Required to inspect network interfaces, routing tables, and iptables
 					HostNetwork: true,
-					HostIPC:     true,
-					HostPID:     true,
+					// HostIPC: Required to inspect shared memory and IPC namespaces
+					HostIPC: true,
+					// HostPID: Required to inspect host processes and validate runtime configurations
+					HostPID: true,
 					Tolerations: []corev1.Toleration{
 						{
 							Key:      "node-role.kubernetes.io/control-plane",
@@ -117,7 +169,8 @@ func desiredDaemonSet(namespace string) *appsv1.DaemonSet {
 								{
 									Name:      HostMountName,
 									MountPath: HostMountPath,
-									ReadOnly:  true,
+									// ReadOnly: Mounted read-only to prevent any modifications to the host
+									ReadOnly: true,
 								},
 							},
 						},

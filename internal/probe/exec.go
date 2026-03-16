@@ -13,6 +13,8 @@ import (
 	"k8s.io/client-go/tools/remotecommand"
 )
 
+// execTimeout limits probe command execution to prevent runaway processes.
+// This timeout applies to all commands executed via the probe pods.
 const execTimeout = 30 * time.Second
 
 // Executor implements checks.ProbeExecutor using the Kubernetes pods/exec API.
@@ -31,6 +33,13 @@ func NewExecutor(config *rest.Config) (*Executor, error) {
 }
 
 // ExecCommand runs a command on the given probe pod and returns stdout/stderr.
+//
+// Security considerations:
+//   - Commands are executed via Kubernetes RBAC-controlled pods/exec API
+//   - Execution requires explicit pods/exec permissions in ClusterRole
+//   - All commands have a 30-second timeout to prevent resource exhaustion
+//   - Commands run in probe container context (not host context directly)
+//   - Audit trail available via Kubernetes API server logs
 func (e *Executor) ExecCommand(ctx context.Context, pod *corev1.Pod, command string) (string, string, error) {
 	ctx, cancel := context.WithTimeout(ctx, execTimeout)
 	defer cancel()
