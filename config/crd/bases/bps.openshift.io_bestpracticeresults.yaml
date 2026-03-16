@@ -65,9 +65,15 @@ spec:
                 type: string
               checkName:
                 description: CheckName is the unique identifier for the check.
+                minLength: 1
                 type: string
               complianceStatus:
                 description: ComplianceStatus is the result of the check.
+                enum:
+                - Compliant
+                - NonCompliant
+                - Error
+                - Skipped
                 type: string
               description:
                 description: Description explains what the check verifies.
@@ -111,6 +117,7 @@ spec:
               scannerRef:
                 description: ScannerRef is the name of the BestPracticeScanner that
                   produced this result.
+                minLength: 1
                 type: string
               timestamp:
                 description: Timestamp is when the check was executed.

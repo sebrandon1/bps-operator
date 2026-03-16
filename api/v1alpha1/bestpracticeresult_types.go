@@ -31,14 +31,20 @@ type ResourceDetail struct {
 // BestPracticeResultSpec defines the observed result of a best practice check.
 type BestPracticeResultSpec struct {
 	// ScannerRef is the name of the BestPracticeScanner that produced this result.
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MinLength=1
 	ScannerRef string `json:"scannerRef"`
 	// CheckName is the unique identifier for the check.
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MinLength=1
 	CheckName string `json:"checkName"`
 	// Category groups the check (e.g. "access-control", "observability").
 	Category string `json:"category"`
 	// Description explains what the check verifies.
 	Description string `json:"description"`
 	// ComplianceStatus is the result of the check.
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:Enum=Compliant;NonCompliant;Error;Skipped
 	ComplianceStatus ComplianceStatus `json:"complianceStatus"`
 	// Reason explains why the check has its current status.
 	// +optional

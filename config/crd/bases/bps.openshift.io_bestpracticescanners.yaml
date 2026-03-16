@@ -63,6 +63,7 @@ spec:
                   means run all.
                 items:
                   type: string
+                minItems: 1
                 type: array
               labelSelector:
                 description: LabelSelector filters pods to scan.
@@ -113,6 +114,7 @@ spec:
               scanInterval:
                 description: ScanInterval defines the interval between periodic scans
                   (e.g. "5m"). Omit for one-shot.
+                pattern: ^([0-9]+(\.[0-9]+)?(ns|us|µs|ms|s|m|h))+$
                 type: string
               suspend:
                 description: Suspend pauses scanning when set to true.

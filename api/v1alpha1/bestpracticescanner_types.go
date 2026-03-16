@@ -16,10 +16,12 @@ type BestPracticeScannerSpec struct {
 
 	// ScanInterval defines the interval between periodic scans (e.g. "5m"). Omit for one-shot.
 	// +optional
+	// +kubebuilder:validation:Pattern=`^([0-9]+(\.[0-9]+)?(ns|us|µs|ms|s|m|h))+$`
 	ScanInterval string `json:"scanInterval,omitempty"`
 
 	// Checks is an optional list of check names to run. Empty means run all.
 	// +optional
+	// +kubebuilder:validation:MinItems=1
 	Checks []string `json:"checks,omitempty"`
 
 	// Suspend pauses scanning when set to true.
