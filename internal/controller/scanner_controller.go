@@ -79,7 +79,9 @@ func (r *ScannerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 			logger.Info("Another scanner already exists in this namespace, setting phase to Error",
 				"existing", other.Name)
 			scannerCR.Status.Phase = bpsv1alpha1.PhaseError
-			_ = r.Status().Update(ctx, &scannerCR)
+			if err := r.Status().Update(ctx, &scannerCR); err != nil {
+				logger.Error(err, "Failed to update scanner status to Error")
+			}
 			return ctrl.Result{}, fmt.Errorf("namespace %s already has scanner %q; only one scanner per namespace is allowed", scannerCR.Namespace, other.Name)
 		}
 	}
@@ -118,7 +120,9 @@ func (r *ScannerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	resources, err := scanner.Discover(ctx, r.Client, targetNS, scannerCR.Spec.LabelSelector)
 	if err != nil {
 		scannerCR.Status.Phase = bpsv1alpha1.PhaseError
-		_ = r.Status().Update(ctx, &scannerCR)
+		if updateErr := r.Status().Update(ctx, &scannerCR); updateErr != nil {
+			logger.Error(updateErr, "Failed to update scanner status to Error")
+		}
 		return ctrl.Result{}, fmt.Errorf("discovering resources: %w", err)
 	}
 
