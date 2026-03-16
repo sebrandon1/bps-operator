@@ -52,18 +52,28 @@ func (r *ScannerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		return ctrl.Result{}, err
 	}
 
+	// Parse scanInterval once if specified
+	var scanInterval time.Duration
+	if scannerCR.Spec.ScanInterval != "" {
+		var err error
+		scanInterval, err = time.ParseDuration(scannerCR.Spec.ScanInterval)
+		if err != nil {
+			logger.Error(err, "Invalid scanInterval, treating as one-shot scan", "interval", scannerCR.Spec.ScanInterval)
+			scanInterval = 0 // Treat as one-shot
+		}
+	}
+
 	// Skip if scan already completed and not yet time for the next one.
 	// This prevents a tight reconcile loop caused by the Owns watch on
 	// BestPracticeResult objects (every create/update triggers re-reconcile).
 	if scannerCR.Status.Phase == bpsv1alpha1.PhaseCompleted && scannerCR.Status.LastScanTime != nil {
-		if scannerCR.Spec.ScanInterval == "" {
+		if scanInterval == 0 {
 			// One-shot scan already done
 			return ctrl.Result{}, nil
 		}
-		interval, err := time.ParseDuration(scannerCR.Spec.ScanInterval)
-		if err == nil && time.Since(scannerCR.Status.LastScanTime.Time) < interval {
+		if time.Since(scannerCR.Status.LastScanTime.Time) < scanInterval {
 			// Not yet time for the next periodic scan
-			requeueIn := time.Until(scannerCR.Status.LastScanTime.Add(interval))
+			requeueIn := time.Until(scannerCR.Status.LastScanTime.Add(scanInterval))
 			return ctrl.Result{RequeueAfter: requeueIn}, nil
 		}
 	}
@@ -229,17 +239,12 @@ func (r *ScannerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	scannerCR.Status.LastScanTime = &now
 	scannerCR.Status.Summary = &summary
 
-	// Calculate next scan time
+	// Calculate next scan time using already-parsed interval
 	var requeueAfter time.Duration
-	if scannerCR.Spec.ScanInterval != "" {
-		interval, err := time.ParseDuration(scannerCR.Spec.ScanInterval)
-		if err != nil {
-			logger.Error(err, "Invalid scanInterval", "interval", scannerCR.Spec.ScanInterval)
-		} else {
-			requeueAfter = interval
-			nextScan := metav1.NewTime(now.Add(interval))
-			scannerCR.Status.NextScanTime = &nextScan
-		}
+	if scanInterval > 0 {
+		requeueAfter = scanInterval
+		nextScan := metav1.NewTime(now.Add(scanInterval))
+		scannerCR.Status.NextScanTime = &nextScan
 	}
 
 	if err := r.Status().Update(ctx, &scannerCR); err != nil {
