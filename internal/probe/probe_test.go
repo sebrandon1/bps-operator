@@ -38,6 +38,45 @@ func TestEnsureDaemonSet_Create(t *testing.T) {
 	}
 }
 
+func TestEnsureDaemonSet_NoUpdateWhenUnchanged(t *testing.T) {
+	scheme := runtime.NewScheme()
+	_ = appsv1.AddToScheme(scheme)
+	_ = corev1.AddToScheme(scheme)
+
+	client := fake.NewClientBuilder().WithScheme(scheme).Build()
+
+	// Create initial DaemonSet
+	err := EnsureDaemonSet(context.Background(), client, "test-ns")
+	if err != nil {
+		t.Fatalf("unexpected error on create: %v", err)
+	}
+
+	// Get the DaemonSet and record its resource version
+	var ds appsv1.DaemonSet
+	err = client.Get(context.Background(), types.NamespacedName{Name: ProbeName, Namespace: "test-ns"}, &ds)
+	if err != nil {
+		t.Fatalf("DaemonSet not found: %v", err)
+	}
+	initialResourceVersion := ds.ResourceVersion
+
+	// Call EnsureDaemonSet again with unchanged spec
+	err = EnsureDaemonSet(context.Background(), client, "test-ns")
+	if err != nil {
+		t.Fatalf("unexpected error on second call: %v", err)
+	}
+
+	// Get the DaemonSet again and verify resource version hasn't changed
+	err = client.Get(context.Background(), types.NamespacedName{Name: ProbeName, Namespace: "test-ns"}, &ds)
+	if err != nil {
+		t.Fatalf("DaemonSet not found after second call: %v", err)
+	}
+
+	if ds.ResourceVersion != initialResourceVersion {
+		t.Errorf("ResourceVersion changed from %s to %s, indicating unnecessary update",
+			initialResourceVersion, ds.ResourceVersion)
+	}
+}
+
 func TestMapProbePods(t *testing.T) {
 	scheme := runtime.NewScheme()
 	_ = corev1.AddToScheme(scheme)

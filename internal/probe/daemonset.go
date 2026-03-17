@@ -51,6 +51,7 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -79,9 +80,12 @@ func EnsureDaemonSet(ctx context.Context, c client.Client, namespace string) err
 		return err
 	}
 
-	// Update the spec if it already exists
-	existing.Spec = ds.Spec
-	return c.Update(ctx, &existing)
+	// Only update if the spec has changed
+	if !equality.Semantic.DeepEqual(existing.Spec, ds.Spec) {
+		existing.Spec = ds.Spec
+		return c.Update(ctx, &existing)
+	}
+	return nil // No update needed
 }
 
 // DeleteDaemonSet removes the certsuite-probe DaemonSet from the given namespace.
