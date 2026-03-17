@@ -13,23 +13,27 @@ import (
 	"k8s.io/client-go/tools/remotecommand"
 )
 
-// execTimeout limits probe command execution to prevent runaway processes.
-// This timeout applies to all commands executed via the probe pods.
-const execTimeout = 30 * time.Second
+// DefaultExecTimeout is the default timeout for probe command execution.
+const DefaultExecTimeout = 30 * time.Second
 
 // Executor implements checks.ProbeExecutor using the Kubernetes pods/exec API.
 type Executor struct {
 	clientset *kubernetes.Clientset
 	config    *rest.Config
+	timeout   time.Duration
 }
 
-// NewExecutor creates a new Executor from the given REST config.
-func NewExecutor(config *rest.Config) (*Executor, error) {
+// NewExecutor creates a new Executor from the given REST config with the specified timeout.
+// If timeout is 0, DefaultExecTimeout is used.
+func NewExecutor(config *rest.Config, timeout time.Duration) (*Executor, error) {
 	cs, err := kubernetes.NewForConfig(config)
 	if err != nil {
 		return nil, fmt.Errorf("creating clientset: %w", err)
 	}
-	return &Executor{clientset: cs, config: config}, nil
+	if timeout == 0 {
+		timeout = DefaultExecTimeout
+	}
+	return &Executor{clientset: cs, config: config, timeout: timeout}, nil
 }
 
 // ExecCommand runs a command on the given probe pod and returns stdout/stderr.
@@ -37,11 +41,11 @@ func NewExecutor(config *rest.Config) (*Executor, error) {
 // Security considerations:
 //   - Commands are executed via Kubernetes RBAC-controlled pods/exec API
 //   - Execution requires explicit pods/exec permissions in ClusterRole
-//   - All commands have a 30-second timeout to prevent resource exhaustion
+//   - All commands have a configurable timeout to prevent resource exhaustion
 //   - Commands run in probe container context (not host context directly)
 //   - Audit trail available via Kubernetes API server logs
 func (e *Executor) ExecCommand(ctx context.Context, pod *corev1.Pod, command string) (string, string, error) {
-	ctx, cancel := context.WithTimeout(ctx, execTimeout)
+	ctx, cancel := context.WithTimeout(ctx, e.timeout)
 	defer cancel()
 
 	req := e.clientset.CoreV1().RESTClient().Post().

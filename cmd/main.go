@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"os"
+	"time"
 
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
@@ -45,11 +46,13 @@ func main() {
 	var probeAddr string
 	var operatorNamespace string
 	var probeImage string
+	var probeExecTimeout time.Duration
 
 	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8080", "The address the metric endpoint binds to.")
 	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
 	flag.StringVar(&operatorNamespace, "operator-namespace", os.Getenv("OPERATOR_NAMESPACE"), "Namespace where the operator runs (for probe DaemonSet).")
 	flag.StringVar(&probeImage, "probe-image", "quay.io/redhat-best-practices-for-k8s/certsuite-probe:v0.0.32", "Probe DaemonSet container image.")
+	flag.DurationVar(&probeExecTimeout, "probe-exec-timeout", 30*time.Second, "Timeout for probe command execution.")
 
 	opts := zap.Options{Development: true}
 	opts.BindFlags(flag.CommandLine)
@@ -72,7 +75,7 @@ func main() {
 	// Create probe executor
 	var probeExecutor *probe.Executor
 	if cfg := mgr.GetConfig(); cfg != nil {
-		probeExecutor, err = probe.NewExecutor(cfg)
+		probeExecutor, err = probe.NewExecutor(cfg, probeExecTimeout)
 		if err != nil {
 			setupLog.Error(err, "unable to create probe executor, probe-based checks will be skipped")
 		}
