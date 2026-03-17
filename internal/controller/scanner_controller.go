@@ -158,14 +158,15 @@ func (r *ScannerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		checkResult := check.Fn(resources)
 
 		// Count summary
-		switch checkResult.ComplianceStatus {
-		case string(bpsv1alpha1.StatusCompliant):
+		status := bpsv1alpha1.ComplianceStatus(checkResult.ComplianceStatus)
+		switch status {
+		case bpsv1alpha1.StatusCompliant:
 			summary.Compliant++
-		case string(bpsv1alpha1.StatusNonCompliant):
+		case bpsv1alpha1.StatusNonCompliant:
 			summary.NonCompliant++
-		case string(bpsv1alpha1.StatusError):
+		case bpsv1alpha1.StatusError:
 			summary.Error++
-		case string(bpsv1alpha1.StatusSkipped):
+		case bpsv1alpha1.StatusSkipped:
 			summary.Skipped++
 		}
 
