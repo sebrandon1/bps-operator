@@ -14,7 +14,11 @@ type BestPracticeScannerSpec struct {
 	// +optional
 	LabelSelector *metav1.LabelSelector `json:"labelSelector,omitempty"`
 
-	// ScanInterval defines the interval between periodic scans (e.g. "5m"). Omit for one-shot.
+	// ScanInterval defines the interval between periodic scans. Omit for one-shot scans.
+	// Must be a valid Go duration string (e.g., "5m", "1h30m", "10s").
+	// Valid time units: ns, us (µs), ms, s, m, h
+	// Examples: "30s", "5m", "1h", "1h30m"
+	// Invalid examples: "5mins" (use "5m"), "1 hour" (use "1h"), "5" (no unit)
 	// +optional
 	// +kubebuilder:validation:Pattern=`^([0-9]+(\.[0-9]+)?(ns|us|µs|ms|s|m|h))+$`
 	ScanInterval string `json:"scanInterval,omitempty"`

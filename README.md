@@ -35,8 +35,8 @@ Defines a scan request.
 |---|---|---|
 | `spec.targetNamespace` | `string` | Namespace to scan (defaults to the CR's namespace) |
 | `spec.labelSelector` | `LabelSelector` | Filters which pods to scan |
-| `spec.scanInterval` | `string` | Interval between scans (e.g. `5m`); omit for one-shot |
-| `spec.checks` | `[]string` | Specific checks to run; empty means all |
+| `spec.scanInterval` | `string` | Interval between scans (e.g. `5m`, `1h30m`); validated Go duration format; omit for one-shot |
+| `spec.checks` | `[]string` | Specific checks to run (minimum 1 if specified); empty means all |
 | `spec.suspend` | `bool` | Pauses scanning when `true` |
 
 Status fields: `phase` (Idle/Scanning/Completed/Error), `lastScanTime`, `nextScanTime`, `summary` (total/compliant/nonCompliant/error/skipped counts).
@@ -117,7 +117,7 @@ spec:
 
 - **targetNamespace**: Which namespace to scan. Defaults to the CR's own namespace.
 - **labelSelector**: Filter pods by labels. Omit to scan all pods in the namespace.
-- **scanInterval**: How often to re-scan. Omit for a one-shot scan.
+- **scanInterval**: How often to re-scan (e.g., "5m", "1h30m", "10s"). Must be a valid Go duration string. Omit for a one-shot scan. The API validates this format at admission time, rejecting invalid durations like "5mins" or "1 hour".
 - **checks**: Run only specific checks by name. Omit to run all 57 checks.
 - **suspend**: Set to `true` to pause periodic scanning.
 
