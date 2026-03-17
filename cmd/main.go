@@ -51,7 +51,7 @@ func main() {
 	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8080", "The address the metric endpoint binds to.")
 	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
 	flag.StringVar(&operatorNamespace, "operator-namespace", os.Getenv("OPERATOR_NAMESPACE"), "Namespace where the operator runs (for probe DaemonSet).")
-	flag.StringVar(&probeImage, "probe-image", "quay.io/redhat-best-practices-for-k8s/certsuite-probe:v0.0.32", "Probe DaemonSet container image.")
+	flag.StringVar(&probeImage, "probe-image", probe.ProbeImage, "Probe DaemonSet container image.")
 	flag.DurationVar(&probeExecTimeout, "probe-exec-timeout", 30*time.Second, "Timeout for probe command execution.")
 
 	opts := zap.Options{Development: true}
