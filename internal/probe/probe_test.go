@@ -19,7 +19,7 @@ func TestEnsureDaemonSet_Create(t *testing.T) {
 
 	client := fake.NewClientBuilder().WithScheme(scheme).Build()
 
-	err := EnsureDaemonSet(context.Background(), client, "test-ns")
+	err := EnsureDaemonSet(context.Background(), client, "test-ns", ProbeImage)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -35,6 +35,53 @@ func TestEnsureDaemonSet_Create(t *testing.T) {
 	}
 	if ds.Spec.Template.Spec.Containers[0].Image != ProbeImage {
 		t.Errorf("expected image %s, got %s", ProbeImage, ds.Spec.Template.Spec.Containers[0].Image)
+	}
+}
+
+func TestEnsureDaemonSet_CustomImage(t *testing.T) {
+	scheme := runtime.NewScheme()
+	_ = appsv1.AddToScheme(scheme)
+	_ = corev1.AddToScheme(scheme)
+
+	client := fake.NewClientBuilder().WithScheme(scheme).Build()
+
+	customImage := "my-registry.io/custom-probe:v1.0.0"
+	err := EnsureDaemonSet(context.Background(), client, "test-ns", customImage)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var ds appsv1.DaemonSet
+	err = client.Get(context.Background(), types.NamespacedName{Name: ProbeName, Namespace: "test-ns"}, &ds)
+	if err != nil {
+		t.Fatalf("DaemonSet not found: %v", err)
+	}
+
+	if ds.Spec.Template.Spec.Containers[0].Image != customImage {
+		t.Errorf("expected custom image %s, got %s", customImage, ds.Spec.Template.Spec.Containers[0].Image)
+	}
+}
+
+func TestEnsureDaemonSet_EmptyImageUsesDefault(t *testing.T) {
+	scheme := runtime.NewScheme()
+	_ = appsv1.AddToScheme(scheme)
+	_ = corev1.AddToScheme(scheme)
+
+	client := fake.NewClientBuilder().WithScheme(scheme).Build()
+
+	err := EnsureDaemonSet(context.Background(), client, "test-ns", "")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var ds appsv1.DaemonSet
+	err = client.Get(context.Background(), types.NamespacedName{Name: ProbeName, Namespace: "test-ns"}, &ds)
+	if err != nil {
+		t.Fatalf("DaemonSet not found: %v", err)
+	}
+
+	if ds.Spec.Template.Spec.Containers[0].Image != ProbeImage {
+		t.Errorf("expected default image %s when empty string provided, got %s", ProbeImage, ds.Spec.Template.Spec.Containers[0].Image)
 	}
 }
 
