@@ -3,12 +3,14 @@ package probe
 import (
 	"context"
 	"testing"
+	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
@@ -63,5 +65,28 @@ func TestMapProbePods(t *testing.T) {
 	}
 	if probeMap["node1"] == nil {
 		t.Error("expected probe pod for node1")
+	}
+}
+
+func TestNewExecutor_DefaultTimeout(t *testing.T) {
+	config := &rest.Config{}
+	executor, err := NewExecutor(config, 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if executor.timeout != DefaultExecTimeout {
+		t.Errorf("expected default timeout %v, got %v", DefaultExecTimeout, executor.timeout)
+	}
+}
+
+func TestNewExecutor_CustomTimeout(t *testing.T) {
+	config := &rest.Config{}
+	customTimeout := 60 * time.Second
+	executor, err := NewExecutor(config, customTimeout)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if executor.timeout != customTimeout {
+		t.Errorf("expected custom timeout %v, got %v", customTimeout, executor.timeout)
 	}
 }
