@@ -44,10 +44,12 @@ func main() {
 	var metricsAddr string
 	var probeAddr string
 	var operatorNamespace string
+	var probeImage string
 
 	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8080", "The address the metric endpoint binds to.")
 	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
 	flag.StringVar(&operatorNamespace, "operator-namespace", os.Getenv("OPERATOR_NAMESPACE"), "Namespace where the operator runs (for probe DaemonSet).")
+	flag.StringVar(&probeImage, "probe-image", "quay.io/redhat-best-practices-for-k8s/certsuite-probe:v0.0.32", "Probe DaemonSet container image.")
 
 	opts := zap.Options{Development: true}
 	opts.BindFlags(flag.CommandLine)
@@ -81,6 +83,7 @@ func main() {
 		Scheme:            mgr.GetScheme(),
 		ProbeExecutor:     probeExecutor,
 		OperatorNamespace: operatorNamespace,
+		ProbeImage:        probeImage,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Scanner")
 		os.Exit(1)

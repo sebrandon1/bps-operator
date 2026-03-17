@@ -25,6 +25,7 @@ type ScannerReconciler struct {
 	Scheme            *runtime.Scheme
 	ProbeExecutor     checks.ProbeExecutor
 	OperatorNamespace string
+	ProbeImage        string
 }
 
 // +kubebuilder:rbac:groups=bps.openshift.io,resources=bestpracticescanners,verbs=get;list;watch;create;update;patch;delete
@@ -121,7 +122,7 @@ func (r *ScannerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 
 	// Ensure probe DaemonSet
 	if r.OperatorNamespace != "" {
-		if err := probe.EnsureDaemonSet(ctx, r.Client, r.OperatorNamespace); err != nil {
+		if err := probe.EnsureDaemonSet(ctx, r.Client, r.OperatorNamespace, r.ProbeImage); err != nil {
 			logger.Error(err, "Failed to ensure probe DaemonSet")
 		}
 	}

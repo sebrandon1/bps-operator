@@ -67,8 +67,8 @@ const (
 )
 
 // EnsureDaemonSet creates or updates the certsuite-probe DaemonSet in the given namespace.
-func EnsureDaemonSet(ctx context.Context, c client.Client, namespace string) error {
-	ds := desiredDaemonSet(namespace)
+func EnsureDaemonSet(ctx context.Context, c client.Client, namespace, image string) error {
+	ds := desiredDaemonSet(namespace, image)
 
 	var existing appsv1.DaemonSet
 	err := c.Get(ctx, types.NamespacedName{Name: ProbeName, Namespace: namespace}, &existing)
@@ -123,10 +123,15 @@ func MapProbePods(ctx context.Context, c client.Client, namespace string) (map[s
 //
 // The DaemonSet runs with elevated privileges to enable node-level compliance checks.
 // See package documentation for security model and justification.
-func desiredDaemonSet(namespace string) *appsv1.DaemonSet {
+func desiredDaemonSet(namespace, image string) *appsv1.DaemonSet {
 	privileged := true
 	hostPathDir := corev1.HostPathDirectory
 	labels := map[string]string{ProbeLabel: ProbeLabelVal}
+
+	// Use provided image or fall back to default
+	if image == "" {
+		image = ProbeImage
+	}
 
 	return &appsv1.DaemonSet{
 		ObjectMeta: metav1.ObjectMeta{
@@ -160,7 +165,7 @@ func desiredDaemonSet(namespace string) *appsv1.DaemonSet {
 					Containers: []corev1.Container{
 						{
 							Name:    ProbeName,
-							Image:   ProbeImage,
+							Image:   image,
 							Command: []string{"sleep", "infinity"},
 							SecurityContext: &corev1.SecurityContext{
 								Privileged: &privileged,
