@@ -59,12 +59,12 @@ import (
 )
 
 const (
-	ProbeImage     = "quay.io/redhat-best-practices-for-k8s/certsuite-probe:v0.0.32"
-	ProbeName      = "certsuite-probe"
-	ProbeLabel     = "redhat-best-practices-for-k8s.com/app"
-	ProbeLabelVal  = "certsuite-probe"
-	HostMountPath  = "/host"
-	HostMountName  = "host-root"
+	ProbeImage    = "quay.io/redhat-best-practices-for-k8s/certsuite-probe:v0.0.32"
+	ProbeName     = "certsuite-probe"
+	ProbeLabel    = "redhat-best-practices-for-k8s.com/app"
+	ProbeLabelVal = "certsuite-probe"
+	HostMountPath = "/host"
+	HostMountName = "host-root"
 )
 
 // EnsureDaemonSet creates or updates the certsuite-probe DaemonSet in the given namespace.
