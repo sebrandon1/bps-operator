@@ -277,15 +277,16 @@ func (r *ScannerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 
 func (r *ScannerReconciler) deleteStaleResults(ctx context.Context, scannerCR *bpsv1alpha1.BestPracticeScanner, currentNames map[string]bool) error {
 	var resultList bpsv1alpha1.BestPracticeResultList
-	if err := r.List(ctx, &resultList, client.InNamespace(scannerCR.Namespace)); err != nil {
+	// Use field selector to filter by scannerRef server-side for efficiency
+	if err := r.List(ctx, &resultList,
+		client.InNamespace(scannerCR.Namespace),
+		client.MatchingFields{"spec.scannerRef": scannerCR.Name},
+	); err != nil {
 		return err
 	}
 
 	for i := range resultList.Items {
 		result := &resultList.Items[i]
-		if result.Spec.ScannerRef != scannerCR.Name {
-			continue
-		}
 		if !currentNames[result.Name] {
 			if err := r.Delete(ctx, result); err != nil && !errors.IsNotFound(err) {
 				return err
@@ -297,6 +298,14 @@ func (r *ScannerReconciler) deleteStaleResults(ctx context.Context, scannerCR *b
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *ScannerReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	// Index BestPracticeResults by scannerRef for efficient querying
+	if err := mgr.GetFieldIndexer().IndexField(context.Background(), &bpsv1alpha1.BestPracticeResult{}, "spec.scannerRef", func(obj client.Object) []string {
+		result := obj.(*bpsv1alpha1.BestPracticeResult)
+		return []string{result.Spec.ScannerRef}
+	}); err != nil {
+		return err
+	}
+
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&bpsv1alpha1.BestPracticeScanner{}).
 		Owns(&bpsv1alpha1.BestPracticeResult{}).
