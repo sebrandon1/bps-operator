@@ -16,6 +16,7 @@ import (
 
 	"github.com/redhat-best-practices-for-k8s/checks"
 	bpsv1alpha1 "github.com/sebrandon1/bps-operator/api/v1alpha1"
+	bpsmetrics "github.com/sebrandon1/bps-operator/internal/metrics"
 	"github.com/sebrandon1/bps-operator/internal/probe"
 	"github.com/sebrandon1/bps-operator/internal/scanner"
 )
@@ -120,6 +121,8 @@ func (r *ScannerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	}
 
 	// Discover and run checks
+	scanStart := time.Now()
+
 	resources, err := r.discoverResources(ctx, &scannerCR, targetNS)
 	if err != nil {
 		return ctrl.Result{}, err
@@ -127,12 +130,14 @@ func (r *ScannerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 
 	summary, resultNames := r.runChecks(ctx, &scannerCR, resources)
 
+	scanDuration := time.Since(scanStart)
+
 	// Delete stale results
 	if err := r.deleteStaleResults(ctx, &scannerCR, resultNames); err != nil {
 		logger.Error(err, "Failed to clean up stale results")
 	}
 
-	return r.completeScan(ctx, req, &scannerCR, summary, scanInterval)
+	return r.completeScan(ctx, req, &scannerCR, summary, scanInterval, scanDuration)
 }
 
 // enforceUniqueness ensures only one scanner exists per namespace.
@@ -283,9 +288,18 @@ func (r *ScannerReconciler) upsertResult(ctx context.Context, scannerCR *bpsv1al
 	}
 }
 
-// completeScan finalizes the scan by updating status and handling periodic requeue/probe cleanup.
-func (r *ScannerReconciler) completeScan(ctx context.Context, req ctrl.Request, scannerCR *bpsv1alpha1.BestPracticeScanner, summary bpsv1alpha1.ScanSummary, scanInterval time.Duration) (ctrl.Result, error) {
+// completeScan finalizes the scan by updating status, recording metrics, and handling periodic requeue/probe cleanup.
+func (r *ScannerReconciler) completeScan(ctx context.Context, req ctrl.Request, scannerCR *bpsv1alpha1.BestPracticeScanner, summary bpsv1alpha1.ScanSummary, scanInterval, scanDuration time.Duration) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
+
+	// Record metrics
+	labels := []string{scannerCR.Name, scannerCR.Namespace}
+	bpsmetrics.ScanDuration.WithLabelValues(labels...).Observe(scanDuration.Seconds())
+	bpsmetrics.ScanTotal.WithLabelValues(labels...).Inc()
+	bpsmetrics.CheckResults.WithLabelValues(scannerCR.Name, scannerCR.Namespace, "Compliant").Set(float64(summary.Compliant))
+	bpsmetrics.CheckResults.WithLabelValues(scannerCR.Name, scannerCR.Namespace, "NonCompliant").Set(float64(summary.NonCompliant))
+	bpsmetrics.CheckResults.WithLabelValues(scannerCR.Name, scannerCR.Namespace, "Skipped").Set(float64(summary.Skipped))
+	bpsmetrics.CheckResults.WithLabelValues(scannerCR.Name, scannerCR.Namespace, "Error").Set(float64(summary.Error))
 
 	// Re-fetch the scanner to avoid conflict errors from concurrent updates
 	if err := r.Get(ctx, req.NamespacedName, scannerCR); err != nil {
