@@ -8,6 +8,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/discovery"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -26,20 +27,31 @@ type ScannerReconciler struct {
 	ProbeExecutor     checks.ProbeExecutor
 	OperatorNamespace string
 	ProbeImage        string
+	ScannerNodeName   string
+	CertValidator     checks.CertificationValidator
+	DiscoveryClient   discovery.ServerVersionInterface
 }
 
 // +kubebuilder:rbac:groups=bps.openshift.io,resources=bestpracticescanners,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=bps.openshift.io,resources=bestpracticescanners/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=bps.openshift.io,resources=bestpracticescanners/finalizers,verbs=update
 // +kubebuilder:rbac:groups=bps.openshift.io,resources=bestpracticeresults,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups="",resources=pods;services;serviceaccounts;namespaces;nodes;persistentvolumes;resourcequotas,verbs=get;list;watch
-// +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=rolebindings;clusterrolebindings,verbs=get;list;watch
+// +kubebuilder:rbac:groups="",resources=pods;services;serviceaccounts;namespaces;nodes;persistentvolumes;resourcequotas;secrets,verbs=get;list;watch
+// +kubebuilder:rbac:groups="",resources=pods,verbs=delete
+// +kubebuilder:rbac:groups="",resources=nodes,verbs=patch
+// +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=roles;rolebindings;clusterrolebindings,verbs=get;list;watch
 // +kubebuilder:rbac:groups=apiextensions.k8s.io,resources=customresourcedefinitions,verbs=get;list;watch
 // +kubebuilder:rbac:groups=apps,resources=daemonsets;deployments;statefulsets,verbs=get;list;watch;create;update;delete
 // +kubebuilder:rbac:groups="",resources=pods/exec,verbs=create
 // +kubebuilder:rbac:groups=networking.k8s.io,resources=networkpolicies,verbs=get;list;watch
 // +kubebuilder:rbac:groups=policy,resources=poddisruptionbudgets,verbs=get;list;watch
 // +kubebuilder:rbac:groups=storage.k8s.io,resources=storageclasses,verbs=get;list;watch
+// +kubebuilder:rbac:groups=config.openshift.io,resources=clusterversions;clusteroperators,verbs=get;list;watch
+// +kubebuilder:rbac:groups=operators.coreos.com,resources=clusterserviceversions;catalogsources;subscriptions,verbs=get;list;watch
+// +kubebuilder:rbac:groups=packages.operators.coreos.com,resources=packagemanifests,verbs=get;list;watch
+// +kubebuilder:rbac:groups=apiserver.openshift.io,resources=apirequestcounts,verbs=get;list;watch
+// +kubebuilder:rbac:groups=k8s.cni.cncf.io,resources=network-attachment-definitions,verbs=get;list;watch
+// +kubebuilder:rbac:groups=sriovnetwork.openshift.io,resources=sriovnetworks;sriovnetworknodepolicies,verbs=get;list;watch
 
 func (r *ScannerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
@@ -128,7 +140,7 @@ func (r *ScannerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	}
 
 	// Discover resources
-	resources, err := scanner.Discover(ctx, r.Client, targetNS, scannerCR.Spec.LabelSelector)
+	resources, err := scanner.Discover(ctx, r.Client, targetNS, scannerCR.Spec.LabelSelector, r.DiscoveryClient)
 	if err != nil {
 		scannerCR.Status.Phase = bpsv1alpha1.PhaseError
 		if updateErr := r.Status().Update(ctx, &scannerCR); updateErr != nil {
@@ -136,6 +148,10 @@ func (r *ScannerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		}
 		return ctrl.Result{}, fmt.Errorf("discovering resources: %w", err)
 	}
+
+	// Wire additional fields not populated by Discover
+	resources.ScannerPodNodeName = r.ScannerNodeName
+	resources.CertValidator = r.CertValidator
 
 	// Map probe pods if available
 	if r.OperatorNamespace != "" {
