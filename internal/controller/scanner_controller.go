@@ -83,32 +83,17 @@ func (r *ScannerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	// BestPracticeResult objects (every create/update triggers re-reconcile).
 	if scannerCR.Status.Phase == bpsv1alpha1.PhaseCompleted && scannerCR.Status.LastScanTime != nil {
 		if scanInterval == 0 {
-			// One-shot scan already done
 			return ctrl.Result{}, nil
 		}
 		if time.Since(scannerCR.Status.LastScanTime.Time) < scanInterval {
-			// Not yet time for the next periodic scan
 			requeueIn := time.Until(scannerCR.Status.LastScanTime.Add(scanInterval))
 			return ctrl.Result{RequeueAfter: requeueIn}, nil
 		}
 	}
 
 	// Enforce one scanner per namespace
-	var scannerList bpsv1alpha1.BestPracticeScannerList
-	if err := r.List(ctx, &scannerList, client.InNamespace(scannerCR.Namespace)); err != nil {
+	if err := r.enforceUniqueness(ctx, &scannerCR); err != nil {
 		return ctrl.Result{}, err
-	}
-	for i := range scannerList.Items {
-		other := &scannerList.Items[i]
-		if other.Name != scannerCR.Name && other.CreationTimestamp.Before(&scannerCR.CreationTimestamp) {
-			logger.Info("Another scanner already exists in this namespace, setting phase to Error",
-				"existing", other.Name)
-			scannerCR.Status.Phase = bpsv1alpha1.PhaseError
-			if err := r.Status().Update(ctx, &scannerCR); err != nil {
-				logger.Error(err, "Failed to update scanner status to Error")
-			}
-			return ctrl.Result{}, fmt.Errorf("namespace %s already has scanner %q; only one scanner per namespace is allowed", scannerCR.Namespace, other.Name)
-		}
 	}
 
 	// Handle suspend
@@ -134,6 +119,49 @@ func (r *ScannerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		return ctrl.Result{}, err
 	}
 
+	// Discover and run checks
+	resources, err := r.discoverResources(ctx, &scannerCR, targetNS)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+
+	summary, resultNames := r.runChecks(ctx, &scannerCR, resources)
+
+	// Delete stale results
+	if err := r.deleteStaleResults(ctx, &scannerCR, resultNames); err != nil {
+		logger.Error(err, "Failed to clean up stale results")
+	}
+
+	return r.completeScan(ctx, req, &scannerCR, summary, scanInterval)
+}
+
+// enforceUniqueness ensures only one scanner exists per namespace.
+func (r *ScannerReconciler) enforceUniqueness(ctx context.Context, scannerCR *bpsv1alpha1.BestPracticeScanner) error {
+	logger := log.FromContext(ctx)
+
+	var scannerList bpsv1alpha1.BestPracticeScannerList
+	if err := r.List(ctx, &scannerList, client.InNamespace(scannerCR.Namespace)); err != nil {
+		return err
+	}
+	for i := range scannerList.Items {
+		other := &scannerList.Items[i]
+		if other.Name != scannerCR.Name && other.CreationTimestamp.Before(&scannerCR.CreationTimestamp) {
+			logger.Info("Another scanner already exists in this namespace, setting phase to Error",
+				"existing", other.Name)
+			scannerCR.Status.Phase = bpsv1alpha1.PhaseError
+			if err := r.Status().Update(ctx, scannerCR); err != nil {
+				logger.Error(err, "Failed to update scanner status to Error")
+			}
+			return fmt.Errorf("namespace %s already has scanner %q; only one scanner per namespace is allowed", scannerCR.Namespace, other.Name)
+		}
+	}
+	return nil
+}
+
+// discoverResources discovers cluster resources and wires probe/certification fields.
+func (r *ScannerReconciler) discoverResources(ctx context.Context, scannerCR *bpsv1alpha1.BestPracticeScanner, targetNS string) (*checks.DiscoveredResources, error) {
+	logger := log.FromContext(ctx)
+
 	// Ensure probe DaemonSet
 	if r.OperatorNamespace != "" {
 		if err := probe.EnsureDaemonSet(ctx, r.Client, r.OperatorNamespace, r.ProbeImage); err != nil {
@@ -141,17 +169,16 @@ func (r *ScannerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		}
 	}
 
-	// Discover resources
 	resources, err := scanner.Discover(ctx, r.Client, targetNS, scannerCR.Spec.LabelSelector, r.DiscoveryClient)
 	if err != nil {
 		scannerCR.Status.Phase = bpsv1alpha1.PhaseError
-		if updateErr := r.Status().Update(ctx, &scannerCR); updateErr != nil {
+		if updateErr := r.Status().Update(ctx, scannerCR); updateErr != nil {
 			logger.Error(updateErr, "Failed to update scanner status to Error")
 		}
-		return ctrl.Result{}, fmt.Errorf("discovering resources: %w", err)
+		return nil, fmt.Errorf("discovering resources: %w", err)
 	}
 
-	// Wire additional fields not populated by Discover
+	// Wire fields not populated by Discover
 	resources.ScannerPodNodeName = r.ScannerNodeName
 	resources.CertValidator = r.CertValidator
 	resources.K8sClientset = r.K8sClientset
@@ -168,7 +195,12 @@ func (r *ScannerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		}
 	}
 
-	// Run checks
+	return resources, nil
+}
+
+// runChecks executes all applicable checks and upserts BestPracticeResult objects.
+// Returns the scan summary and the set of current result names.
+func (r *ScannerReconciler) runChecks(ctx context.Context, scannerCR *bpsv1alpha1.BestPracticeScanner, resources *checks.DiscoveredResources) (bpsv1alpha1.ScanSummary, map[string]bool) {
 	checksToRun := checks.Filtered(scannerCR.Spec.Checks)
 	now := metav1.Now()
 	summary := bpsv1alpha1.ScanSummary{Total: len(checksToRun)}
@@ -177,9 +209,7 @@ func (r *ScannerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	for _, check := range checksToRun {
 		checkResult := check.Fn(resources)
 
-		// Count summary
-		status := bpsv1alpha1.ComplianceStatus(checkResult.ComplianceStatus)
-		switch status {
+		switch bpsv1alpha1.ComplianceStatus(checkResult.ComplianceStatus) {
 		case bpsv1alpha1.StatusCompliant:
 			summary.Compliant++
 		case bpsv1alpha1.StatusNonCompliant:
@@ -190,78 +220,83 @@ func (r *ScannerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 			summary.Skipped++
 		}
 
-		// Upsert BestPracticeResult
 		resultName := fmt.Sprintf("%s-%s", scannerCR.Name, check.Name)
 		resultNames[resultName] = true
 
-		result := &bpsv1alpha1.BestPracticeResult{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      resultName,
-				Namespace: scannerCR.Namespace,
-			},
-		}
-
-		op, err := controllerutil.CreateOrUpdate(ctx, r.Client, result, func() error {
-			// Set owner reference
-			if err := controllerutil.SetControllerReference(&scannerCR, result, r.Scheme); err != nil {
-				return err
-			}
-
-			// Convert check details to API details
-			var apiDetails []bpsv1alpha1.ResourceDetail
-			for _, d := range checkResult.Details {
-				apiDetails = append(apiDetails, bpsv1alpha1.ResourceDetail{
-					Kind:      d.Kind,
-					Name:      d.Name,
-					Namespace: d.Namespace,
-					Compliant: d.Compliant,
-					Message:   d.Message,
-				})
-			}
-
-			var catalogURL string
-			if check.CatalogID != "" {
-				catalogURL = "https://github.com/redhat-best-practices-for-k8s/certsuite/blob/main/CATALOG.md#" + check.CatalogID
-			}
-
-			result.Spec = bpsv1alpha1.BestPracticeResultSpec{
-				ScannerRef:       scannerCR.Name,
-				CheckName:        check.Name,
-				Category:         check.Category,
-				Description:      check.Description,
-				ComplianceStatus: bpsv1alpha1.ComplianceStatus(checkResult.ComplianceStatus),
-				Reason:           checkResult.Reason,
-				Remediation:      check.Remediation,
-				CatalogURL:       catalogURL,
-				Details:          apiDetails,
-				Timestamp:        now,
-			}
-			return nil
-		})
-
-		if err != nil {
-			logger.Error(err, "Failed to upsert result", "result", resultName)
-		} else {
-			logger.V(1).Info("Result upserted", "result", resultName, "operation", op)
-		}
+		r.upsertResult(ctx, scannerCR, check, checkResult, resultName, now)
 	}
 
-	// Delete stale results
-	if err := r.deleteStaleResults(ctx, &scannerCR, resultNames); err != nil {
-		logger.Error(err, "Failed to clean up stale results")
+	return summary, resultNames
+}
+
+// upsertResult creates or updates a BestPracticeResult for a single check.
+func (r *ScannerReconciler) upsertResult(ctx context.Context, scannerCR *bpsv1alpha1.BestPracticeScanner, check checks.CheckInfo, checkResult checks.CheckResult, resultName string, now metav1.Time) {
+	logger := log.FromContext(ctx)
+
+	result := &bpsv1alpha1.BestPracticeResult{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      resultName,
+			Namespace: scannerCR.Namespace,
+		},
 	}
+
+	op, err := controllerutil.CreateOrUpdate(ctx, r.Client, result, func() error {
+		if err := controllerutil.SetControllerReference(scannerCR, result, r.Scheme); err != nil {
+			return err
+		}
+
+		var apiDetails []bpsv1alpha1.ResourceDetail
+		for _, d := range checkResult.Details {
+			apiDetails = append(apiDetails, bpsv1alpha1.ResourceDetail{
+				Kind:      d.Kind,
+				Name:      d.Name,
+				Namespace: d.Namespace,
+				Compliant: d.Compliant,
+				Message:   d.Message,
+			})
+		}
+
+		var catalogURL string
+		if check.CatalogID != "" {
+			catalogURL = "https://github.com/redhat-best-practices-for-k8s/certsuite/blob/main/CATALOG.md#" + check.CatalogID
+		}
+
+		result.Spec = bpsv1alpha1.BestPracticeResultSpec{
+			ScannerRef:       scannerCR.Name,
+			CheckName:        check.Name,
+			Category:         check.Category,
+			Description:      check.Description,
+			ComplianceStatus: bpsv1alpha1.ComplianceStatus(checkResult.ComplianceStatus),
+			Reason:           checkResult.Reason,
+			Remediation:      check.Remediation,
+			CatalogURL:       catalogURL,
+			Details:          apiDetails,
+			Timestamp:        now,
+		}
+		return nil
+	})
+
+	if err != nil {
+		logger.Error(err, "Failed to upsert result", "result", resultName)
+	} else {
+		logger.V(1).Info("Result upserted", "result", resultName, "operation", op)
+	}
+}
+
+// completeScan finalizes the scan by updating status and handling periodic requeue/probe cleanup.
+func (r *ScannerReconciler) completeScan(ctx context.Context, req ctrl.Request, scannerCR *bpsv1alpha1.BestPracticeScanner, summary bpsv1alpha1.ScanSummary, scanInterval time.Duration) (ctrl.Result, error) {
+	logger := log.FromContext(ctx)
 
 	// Re-fetch the scanner to avoid conflict errors from concurrent updates
-	if err := r.Get(ctx, req.NamespacedName, &scannerCR); err != nil {
+	if err := r.Get(ctx, req.NamespacedName, scannerCR); err != nil {
 		return ctrl.Result{}, err
 	}
 
-	// Update status
+	now := metav1.Now()
 	scannerCR.Status.Phase = bpsv1alpha1.PhaseCompleted
 	scannerCR.Status.LastScanTime = &now
 	scannerCR.Status.Summary = &summary
 
-	// Calculate next scan time using already-parsed interval
 	var requeueAfter time.Duration
 	if scanInterval > 0 {
 		requeueAfter = scanInterval
@@ -269,7 +304,7 @@ func (r *ScannerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		scannerCR.Status.NextScanTime = &nextScan
 	}
 
-	if err := r.Status().Update(ctx, &scannerCR); err != nil {
+	if err := r.Status().Update(ctx, scannerCR); err != nil {
 		return ctrl.Result{}, err
 	}
 
@@ -298,7 +333,6 @@ func (r *ScannerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 
 func (r *ScannerReconciler) deleteStaleResults(ctx context.Context, scannerCR *bpsv1alpha1.BestPracticeScanner, currentNames map[string]bool) error {
 	var resultList bpsv1alpha1.BestPracticeResultList
-	// Use field selector to filter by scannerRef server-side for efficiency
 	if err := r.List(ctx, &resultList,
 		client.InNamespace(scannerCR.Namespace),
 		client.MatchingFields{"spec.scannerRef": scannerCR.Name},
@@ -319,7 +353,6 @@ func (r *ScannerReconciler) deleteStaleResults(ctx context.Context, scannerCR *b
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *ScannerReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	// Index BestPracticeResults by scannerRef for efficient querying
 	if err := mgr.GetFieldIndexer().IndexField(context.Background(), &bpsv1alpha1.BestPracticeResult{}, "spec.scannerRef", func(obj client.Object) []string {
 		result := obj.(*bpsv1alpha1.BestPracticeResult)
 		return []string{result.Spec.ScannerRef}
