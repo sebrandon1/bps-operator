@@ -1,0 +1,122 @@
+name: E2E OCP 4.21 Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: "0 4 * * *" # Nightly at 04:00 UTC
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions: read-all
+
+jobs:
+  e2e-ocp:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    env:
+      KUBECONFIG: '/home/runner/.crc/machines/crc/kubeconfig'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Setup Go
+        uses: actions/setup-go@4b73464bb391d4059bd26b0524d20df3927bd417 # v6.3.0
+        with:
+          go-version-file: go.mod
+
+      - name: Install controller-gen
+        run: go install sigs.k8s.io/controller-tools/cmd/controller-gen@latest
+
+      - name: Check if CRC_PULL_SECRET exists
+        env:
+          super_secret: ${{ secrets.CRC_PULL_SECRET }}
+        if: ${{ env.super_secret == '' }}
+        run: |
+          echo "CRC_PULL_SECRET is not set"
+          exit 1
+
+      - name: Deploy OCP cluster
+        uses: palmsoftware/quick-ocp@88f6e55e86f0f3449d7044918fd04a92536fe481 # v0.0.27
+        with:
+          ocpPullSecret: $OCP_PULL_SECRET
+          bundleCache: true
+          desiredOCPVersion: 4.21
+          waitForOperatorsReady: true
+        env:
+          OCP_PULL_SECRET: ${{ secrets.CRC_PULL_SECRET }}
+
+      - name: Build image
+        run: make build-image IMG=quay.io/redhat-best-practices-for-k8s/bps-operator:e2e
+
+      - name: Deploy operator
+        run: make deploy IMG=quay.io/redhat-best-practices-for-k8s/bps-operator:e2e
+
+      - name: Update image and pull policy
+        run: |
+          oc set image deployment/bps-operator-controller-manager manager=quay.io/redhat-best-practices-for-k8s/bps-operator:e2e -n bps-operator-system
+          oc patch deployment bps-operator-controller-manager -n bps-operator-system \
+            -p '{"spec":{"template":{"spec":{"containers":[{"name":"manager","imagePullPolicy":"IfNotPresent"}]}}}}'
+
+      - name: Import image into OpenShift registry
+        run: |
+          docker save quay.io/redhat-best-practices-for-k8s/bps-operator:e2e -o /tmp/bps-operator.tar
+          eval $(crc podman-env)
+          sudo -E ${HOME}/.crc/bin/oc/podman load -i /tmp/bps-operator.tar
+
+      - name: Wait for operator to be ready
+        run: oc rollout status deployment/bps-operator-controller-manager -n bps-operator-system --timeout=120s
+
+      - name: Deploy test workloads
+        run: |
+          oc apply -f config/samples/test-workloads.yaml
+          oc wait --for=jsonpath='{.status.phase}'=Active namespace/bps-test --timeout=10s
+
+      - name: Create scanner
+        run: oc apply -f config/samples/scanner_bps_test.yaml
+
+      - name: Wait for scan to complete
+        run: |
+          for i in $(seq 1 180); do
+            PHASE=$(oc get bestpracticescanners test-scanner -n bps-test -o jsonpath='{.status.phase}' 2>/dev/null)
+            if [ "$PHASE" = "Completed" ]; then echo "Scan completed."; break; fi
+            if [ "$PHASE" = "Error" ]; then
+              echo "Scan failed with Error phase"
+              oc logs deployment/bps-operator-controller-manager -n bps-operator-system --tail=50
+              exit 1
+            fi
+            if [ $i -eq 180 ]; then
+              echo "Timed out waiting for scan (phase: $PHASE)"
+              oc logs deployment/bps-operator-controller-manager -n bps-operator-system --tail=50
+              exit 1
+            fi
+            sleep 2
+          done
+
+      - name: Show results
+        run: |
+          echo "=== Scanner Status ==="
+          oc get bestpracticescanners test-scanner -n bps-test -o yaml | grep -A 10 "status:"
+          echo ""
+          echo "=== Results ==="
+          oc get bestpracticeresults -n bps-test
+
+      - name: Verify check count
+        run: |
+          TOTAL=$(oc get bestpracticescanners test-scanner -n bps-test -o jsonpath='{.status.summary.total}')
+          ERRORS=$(oc get bestpracticescanners test-scanner -n bps-test -o jsonpath='{.status.summary.error}')
+          echo "Total checks: $TOTAL, Errors: $ERRORS"
+          if [ "$TOTAL" -lt 100 ]; then
+            echo "Expected at least 100 checks, got $TOTAL"
+            exit 1
+          fi
+          if [ "$ERRORS" -gt 0 ]; then
+            echo "Expected 0 errors, got $ERRORS"
+            echo "=== Error details ==="
+            oc get bestpracticeresults -n bps-test -o jsonpath='{range .items[?(@.spec.complianceStatus=="Error")]}{.spec.checkName}{"\t"}{.spec.reason}{"\n"}{end}'
+            exit 1
+          fi
