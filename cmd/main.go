@@ -12,8 +12,11 @@ import (
 	configv1 "github.com/openshift/api/config/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
+	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/client-go/restmapper"
+	"k8s.io/client-go/scale"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
@@ -105,6 +108,17 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Create scale client for CRD scaling checks
+	discoveryClient := k8sClientset.Discovery()
+	groupResources, err := restmapper.GetAPIGroupResources(discoveryClient)
+	if err != nil {
+		setupLog.Error(err, "unable to get API group resources for scale client")
+		os.Exit(1)
+	}
+	mapper := restmapper.NewDiscoveryRESTMapper(groupResources)
+	resolver := scale.NewDiscoveryScaleKindResolver(discoveryClient)
+	scaleClient := scale.New(discoveryClient.RESTClient(), mapper, dynamic.LegacyAPIPathResolverFunc, resolver)
+
 	// Create certification validator
 	certValidator := certification.NewPyxisValidator(certAPIURL)
 
@@ -116,7 +130,9 @@ func main() {
 		ProbeImage:        probeImage,
 		ScannerNodeName:   os.Getenv("NODE_NAME"),
 		CertValidator:     certValidator,
-		DiscoveryClient:   k8sClientset.Discovery(),
+		DiscoveryClient:   discoveryClient,
+		K8sClientset:      k8sClientset,
+		ScaleClient:       scaleClient,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Scanner")
 		os.Exit(1)
