@@ -30,6 +30,8 @@ type ScannerReconciler struct {
 	ScannerNodeName   string
 	CertValidator     checks.CertificationValidator
 	DiscoveryClient   discovery.ServerVersionInterface
+	K8sClientset      any // kubernetes.Interface
+	ScaleClient       any // scale.ScalesGetter
 }
 
 // +kubebuilder:rbac:groups=bps.openshift.io,resources=bestpracticescanners,verbs=get;list;watch;create;update;patch;delete
@@ -152,6 +154,8 @@ func (r *ScannerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	// Wire additional fields not populated by Discover
 	resources.ScannerPodNodeName = r.ScannerNodeName
 	resources.CertValidator = r.CertValidator
+	resources.K8sClientset = r.K8sClientset
+	resources.ScaleClient = r.ScaleClient
 
 	// Map probe pods if available
 	if r.OperatorNamespace != "" {
