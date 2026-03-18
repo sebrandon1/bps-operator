@@ -36,6 +36,11 @@ spec:
           image: quay.io/bapalm/bps-operator:latest
           args:
             - --operator-namespace=bps-operator-system
+          env:
+            - name: NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
           ports:
             - containerPort: 8080
               name: metrics

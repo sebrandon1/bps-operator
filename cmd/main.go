@@ -5,8 +5,14 @@ import (
 	"os"
 	"time"
 
+	netattdefv1 "github.com/k8snetworkplumbingwg/network-attachment-definition-client/pkg/apis/k8s.cni.cncf.io/v1"
+	olmv1alpha1 "github.com/operator-framework/api/pkg/operators/v1alpha1"
+	olmpackagev1 "github.com/operator-framework/operator-lifecycle-manager/pkg/package-server/apis/operators/v1"
+	apiserverv1 "github.com/openshift/api/apiserver/v1"
+	configv1 "github.com/openshift/api/config/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
+	"k8s.io/client-go/kubernetes"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
@@ -16,11 +22,13 @@ import (
 	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 
 	bpsv1alpha1 "github.com/sebrandon1/bps-operator/api/v1alpha1"
+	"github.com/sebrandon1/bps-operator/internal/certification"
 	"github.com/sebrandon1/bps-operator/internal/controller"
 	"github.com/sebrandon1/bps-operator/internal/probe"
 
 	// Register checks via init()
 	_ "github.com/redhat-best-practices-for-k8s/checks/accesscontrol"
+	_ "github.com/redhat-best-practices-for-k8s/checks/certification"
 	_ "github.com/redhat-best-practices-for-k8s/checks/lifecycle"
 	_ "github.com/redhat-best-practices-for-k8s/checks/manageability"
 	_ "github.com/redhat-best-practices-for-k8s/checks/networking"
@@ -39,6 +47,11 @@ func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 	utilruntime.Must(bpsv1alpha1.AddToScheme(scheme))
 	utilruntime.Must(apiextv1.AddToScheme(scheme))
+	utilruntime.Must(configv1.Install(scheme))
+	utilruntime.Must(apiserverv1.Install(scheme))
+	utilruntime.Must(olmv1alpha1.AddToScheme(scheme))
+	utilruntime.Must(olmpackagev1.AddToScheme(scheme))
+	utilruntime.Must(netattdefv1.AddToScheme(scheme))
 }
 
 func main() {
@@ -47,12 +60,14 @@ func main() {
 	var operatorNamespace string
 	var probeImage string
 	var probeExecTimeout time.Duration
+	var certAPIURL string
 
 	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8080", "The address the metric endpoint binds to.")
 	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
 	flag.StringVar(&operatorNamespace, "operator-namespace", os.Getenv("OPERATOR_NAMESPACE"), "Namespace where the operator runs (for probe DaemonSet).")
 	flag.StringVar(&probeImage, "probe-image", probe.ProbeImage, "Probe DaemonSet container image.")
 	flag.DurationVar(&probeExecTimeout, "probe-exec-timeout", 30*time.Second, "Timeout for probe command execution.")
+	flag.StringVar(&certAPIURL, "certification-api-url", "", "Red Hat Pyxis API base URL for certification checks (default: Red Hat Catalog API).")
 
 	opts := zap.Options{Development: true}
 	opts.BindFlags(flag.CommandLine)
@@ -60,7 +75,9 @@ func main() {
 
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
 
-	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
+	cfg := ctrl.GetConfigOrDie()
+
+	mgr, err := ctrl.NewManager(cfg, ctrl.Options{
 		Scheme: scheme,
 		Metrics: metricsserver.Options{
 			BindAddress: metricsAddr,
@@ -74,12 +91,22 @@ func main() {
 
 	// Create probe executor
 	var probeExecutor *probe.Executor
-	if cfg := mgr.GetConfig(); cfg != nil {
+	if cfg != nil {
 		probeExecutor, err = probe.NewExecutor(cfg, probeExecTimeout)
 		if err != nil {
 			setupLog.Error(err, "unable to create probe executor, probe-based checks will be skipped")
 		}
 	}
+
+	// Create discovery client for K8s version
+	k8sClientset, err := kubernetes.NewForConfig(cfg)
+	if err != nil {
+		setupLog.Error(err, "unable to create kubernetes clientset")
+		os.Exit(1)
+	}
+
+	// Create certification validator
+	certValidator := certification.NewPyxisValidator(certAPIURL)
 
 	if err := (&controller.ScannerReconciler{
 		Client:            mgr.GetClient(),
@@ -87,6 +114,9 @@ func main() {
 		ProbeExecutor:     probeExecutor,
 		OperatorNamespace: operatorNamespace,
 		ProbeImage:        probeImage,
+		ScannerNodeName:   os.Getenv("NODE_NAME"),
+		CertValidator:     certValidator,
+		DiscoveryClient:   k8sClientset.Discovery(),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Scanner")
 		os.Exit(1)

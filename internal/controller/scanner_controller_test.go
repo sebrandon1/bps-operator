@@ -22,6 +22,7 @@ import (
 
 	// Register checks
 	_ "github.com/redhat-best-practices-for-k8s/checks/accesscontrol"
+	_ "github.com/redhat-best-practices-for-k8s/checks/certification"
 	_ "github.com/redhat-best-practices-for-k8s/checks/observability"
 )
 
