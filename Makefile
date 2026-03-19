@@ -65,6 +65,34 @@ test-e2e: build-image ## Run e2e tests against a Kind cluster
 	done
 	@echo "=== E2E Results ==="
 	@$(KUBECTL) get bestpracticeresults -n $(TEST_NAMESPACE)
+	@echo ""
+	@echo "=== Verify Events ==="
+	@EVENTS=$$($(KUBECTL) get events -n $(TEST_NAMESPACE) --field-selector reason=ScanCompleted -o jsonpath='{.items}' 2>/dev/null); \
+	if [ "$$EVENTS" = "[]" ] || [ -z "$$EVENTS" ]; then \
+		echo "FAIL: No ScanCompleted event found"; exit 1; \
+	else \
+		echo "PASS: ScanCompleted event found"; \
+	fi
+	@echo ""
+	@echo "=== Verify Conditions ==="
+	@CONDITION=$$($(KUBECTL) get bestpracticescanners test-scanner -n $(TEST_NAMESPACE) -o jsonpath='{.status.conditions[?(@.type=="ScanComplete")].status}' 2>/dev/null); \
+	if [ "$$CONDITION" != "True" ]; then \
+		echo "FAIL: ScanComplete condition is not True (got: $$CONDITION)"; exit 1; \
+	else \
+		echo "PASS: ScanComplete condition is True"; \
+	fi
+	@echo ""
+	@echo "=== Verify Metrics ==="
+	@$(KUBECTL) port-forward -n $(OPERATOR_NAMESPACE) deployment/bps-operator-controller-manager 18080:8080 &>/dev/null & \
+	PF_PID=$$!; \
+	sleep 2; \
+	METRICS=$$(curl -s http://localhost:18080/metrics 2>/dev/null | grep bps_scans_total || true); \
+	kill $$PF_PID 2>/dev/null; wait $$PF_PID 2>/dev/null; \
+	if [ -z "$$METRICS" ]; then \
+		echo "FAIL: bps_scans_total metric not found"; exit 1; \
+	else \
+		echo "PASS: Metrics available"; echo "  $$METRICS"; \
+	fi
 
 .PHONY: build-image
 build-image:

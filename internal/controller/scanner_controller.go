@@ -5,10 +5,13 @@ import (
 	"fmt"
 	"time"
 
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/discovery"
+	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -25,6 +28,7 @@ import (
 type ScannerReconciler struct {
 	client.Client
 	Scheme            *runtime.Scheme
+	Recorder          record.EventRecorder
 	ProbeExecutor     checks.ProbeExecutor
 	OperatorNamespace string
 	ProbeImage        string
@@ -55,6 +59,7 @@ type ScannerReconciler struct {
 // +kubebuilder:rbac:groups=apiserver.openshift.io,resources=apirequestcounts,verbs=get;list;watch
 // +kubebuilder:rbac:groups=k8s.cni.cncf.io,resources=network-attachment-definitions,verbs=get;list;watch
 // +kubebuilder:rbac:groups=sriovnetwork.openshift.io,resources=sriovnetworks;sriovnetworknodepolicies,verbs=get;list;watch
+// +kubebuilder:rbac:groups="",resources=events,verbs=create;patch
 
 func (r *ScannerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
@@ -116,15 +121,24 @@ func (r *ScannerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 
 	// Set phase to Scanning
 	scannerCR.Status.Phase = bpsv1alpha1.PhaseScanning
+	meta.SetStatusCondition(&scannerCR.Status.Conditions, metav1.Condition{
+		Type:               bpsv1alpha1.ConditionScanComplete,
+		Status:             metav1.ConditionFalse,
+		Reason:             bpsv1alpha1.ReasonScanStarted,
+		Message:            "Compliance scan in progress",
+		ObservedGeneration: scannerCR.Generation,
+	})
 	if err := r.Status().Update(ctx, &scannerCR); err != nil {
 		return ctrl.Result{}, err
 	}
+	r.Recorder.Event(&scannerCR, corev1.EventTypeNormal, bpsv1alpha1.ReasonScanStarted, "Starting compliance scan")
 
 	// Discover and run checks
 	scanStart := time.Now()
 
 	resources, err := r.discoverResources(ctx, &scannerCR, targetNS)
 	if err != nil {
+		r.Recorder.Eventf(&scannerCR, corev1.EventTypeWarning, bpsv1alpha1.ReasonScanFailed, "Resource discovery failed: %v", err)
 		return ctrl.Result{}, err
 	}
 
@@ -177,6 +191,13 @@ func (r *ScannerReconciler) discoverResources(ctx context.Context, scannerCR *bp
 	resources, err := scanner.Discover(ctx, r.Client, targetNS, scannerCR.Spec.LabelSelector, r.DiscoveryClient)
 	if err != nil {
 		scannerCR.Status.Phase = bpsv1alpha1.PhaseError
+		meta.SetStatusCondition(&scannerCR.Status.Conditions, metav1.Condition{
+			Type:               bpsv1alpha1.ConditionScanComplete,
+			Status:             metav1.ConditionFalse,
+			Reason:             bpsv1alpha1.ReasonScanFailed,
+			Message:            fmt.Sprintf("Resource discovery failed: %v", err),
+			ObservedGeneration: scannerCR.Generation,
+		})
 		if updateErr := r.Status().Update(ctx, scannerCR); updateErr != nil {
 			logger.Error(updateErr, "Failed to update scanner status to Error")
 		}
@@ -194,9 +215,24 @@ func (r *ScannerReconciler) discoverResources(ctx context.Context, scannerCR *bp
 		probePods, err := probe.MapProbePods(ctx, r.Client, r.OperatorNamespace)
 		if err != nil {
 			logger.Error(err, "Failed to map probe pods, probe-based checks will be skipped")
+			r.Recorder.Event(scannerCR, corev1.EventTypeWarning, bpsv1alpha1.ReasonProbeUnavailable, "Probe pods not available, probe-based checks will be skipped")
+			meta.SetStatusCondition(&scannerCR.Status.Conditions, metav1.Condition{
+				Type:               bpsv1alpha1.ConditionProbeAvailable,
+				Status:             metav1.ConditionFalse,
+				Reason:             bpsv1alpha1.ReasonProbePodsFailed,
+				Message:            err.Error(),
+				ObservedGeneration: scannerCR.Generation,
+			})
 		} else {
 			resources.ProbePods = probePods
 			resources.ProbeExecutor = r.ProbeExecutor
+			meta.SetStatusCondition(&scannerCR.Status.Conditions, metav1.Condition{
+				Type:               bpsv1alpha1.ConditionProbeAvailable,
+				Status:             metav1.ConditionTrue,
+				Reason:             bpsv1alpha1.ReasonProbePodsReady,
+				Message:            fmt.Sprintf("%d probe pods available", len(probePods)),
+				ObservedGeneration: scannerCR.Generation,
+			})
 		}
 	}
 
@@ -311,6 +347,14 @@ func (r *ScannerReconciler) completeScan(ctx context.Context, req ctrl.Request, 
 	scannerCR.Status.LastScanTime = &now
 	scannerCR.Status.Summary = &summary
 
+	meta.SetStatusCondition(&scannerCR.Status.Conditions, metav1.Condition{
+		Type:               bpsv1alpha1.ConditionScanComplete,
+		Status:             metav1.ConditionTrue,
+		Reason:             bpsv1alpha1.ReasonScanSucceeded,
+		Message:            fmt.Sprintf("%d checks: %d compliant, %d non-compliant, %d skipped, %d errors", summary.Total, summary.Compliant, summary.NonCompliant, summary.Skipped, summary.Error),
+		ObservedGeneration: scannerCR.Generation,
+	})
+
 	var requeueAfter time.Duration
 	if scanInterval > 0 {
 		requeueAfter = scanInterval
@@ -321,6 +365,10 @@ func (r *ScannerReconciler) completeScan(ctx context.Context, req ctrl.Request, 
 	if err := r.Status().Update(ctx, scannerCR); err != nil {
 		return ctrl.Result{}, err
 	}
+
+	r.Recorder.Eventf(scannerCR, corev1.EventTypeNormal, bpsv1alpha1.ReasonScanCompleted,
+		"Scan completed: %d compliant, %d non-compliant, %d skipped, %d errors (%.1fs)",
+		summary.Compliant, summary.NonCompliant, summary.Skipped, summary.Error, scanDuration.Seconds())
 
 	logger.Info("Scan completed",
 		"total", summary.Total,
