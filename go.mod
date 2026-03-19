@@ -7,6 +7,7 @@ require (
 	github.com/openshift/api v0.0.0-20251118143053-b6fddd3c8174
 	github.com/operator-framework/api v0.41.0
 	github.com/operator-framework/operator-lifecycle-manager v0.22.0
+	github.com/prometheus/client_golang v1.23.2
 	github.com/redhat-best-practices-for-k8s/checks v0.0.3
 	k8s.io/api v0.35.2
 	k8s.io/apiextensions-apiserver v0.35.2
@@ -60,7 +61,6 @@ require (
 	github.com/onsi/gomega v1.38.2 // indirect
 	github.com/operator-framework/operator-registry v1.17.5 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
-	github.com/prometheus/client_golang v1.23.2 // indirect
 	github.com/prometheus/client_model v0.6.2 // indirect
 	github.com/prometheus/common v0.67.5 // indirect
 	github.com/prometheus/procfs v0.19.2 // indirect
