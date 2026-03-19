@@ -5,6 +5,22 @@ All notable changes to bps-operator will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- Prometheus metrics: `bps_scan_duration_seconds`, `bps_scans_total`, `bps_check_results` (#47)
+- OCP 4.21 E2E test workflow using quick-ocp/CRC with OpenShift internal registry (#44)
+- Unit tests for `cmd/main.go` flag parsing and scheme registration (#49)
+- `--node-name` flag as alternative to `NODE_NAME` env var (#49)
+
+### Changed
+- Upgraded checks library from v0.0.3 to v0.0.4 (#50)
+- Refactored `Reconcile` into smaller methods: `enforceUniqueness`, `discoverResources`, `runChecks`, `upsertResult`, `completeScan` (#46)
+- Refactored `main()` into testable `parseFlags()` and `run()` functions (#49)
+- Wired `K8sClientset` and `ScaleClient` to fix 5 lifecycle/observability check errors (#42)
+- Removed resource limits from operator deployment to prevent OOMKills (#43)
+- Bumped google.golang.org/grpc from 1.78.0 to 1.79.3 (#48)
+
 ## [0.0.3] - 2026-03-18
 
 ### Changed
@@ -35,6 +51,7 @@ Initial release.
 - Multi-arch container image (amd64/arm64)
 - E2E tests in CI
 
+[Unreleased]: https://github.com/sebrandon1/bps-operator/compare/v0.0.3...HEAD
 [0.0.3]: https://github.com/sebrandon1/bps-operator/compare/v0.0.2...v0.0.3
 [0.0.2]: https://github.com/sebrandon1/bps-operator/compare/v0.0.1...v0.0.2
 [0.0.1]: https://github.com/sebrandon1/bps-operator/releases/tag/v0.0.1
