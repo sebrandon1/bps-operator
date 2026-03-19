@@ -2,6 +2,7 @@ package main
 
 import (
 	"flag"
+	"fmt"
 	"os"
 	"time"
 
@@ -15,6 +16,7 @@ import (
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/client-go/rest"
 	"k8s.io/client-go/restmapper"
 	"k8s.io/client-go/scale"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -39,6 +41,9 @@ import (
 	_ "github.com/redhat-best-practices-for-k8s/checks/operator"
 	_ "github.com/redhat-best-practices-for-k8s/checks/performance"
 	_ "github.com/redhat-best-practices-for-k8s/checks/platform"
+
+	// Register metrics
+	_ "github.com/sebrandon1/bps-operator/internal/metrics"
 )
 
 var (
@@ -57,99 +62,123 @@ func init() {
 	utilruntime.Must(netattdefv1.AddToScheme(scheme))
 }
 
-func main() {
-	var metricsAddr string
-	var probeAddr string
-	var operatorNamespace string
-	var probeImage string
-	var probeExecTimeout time.Duration
-	var certAPIURL string
+// options holds parsed command-line flags.
+type options struct {
+	metricsAddr       string
+	probeAddr         string
+	operatorNamespace string
+	probeImage        string
+	probeExecTimeout  time.Duration
+	certAPIURL        string
+	nodeName          string
+}
 
-	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8080", "The address the metric endpoint binds to.")
-	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
-	flag.StringVar(&operatorNamespace, "operator-namespace", os.Getenv("OPERATOR_NAMESPACE"), "Namespace where the operator runs (for probe DaemonSet).")
-	flag.StringVar(&probeImage, "probe-image", probe.ProbeImage, "Probe DaemonSet container image.")
-	flag.DurationVar(&probeExecTimeout, "probe-exec-timeout", 30*time.Second, "Timeout for probe command execution.")
-	flag.StringVar(&certAPIURL, "certification-api-url", "", "Red Hat Pyxis API base URL for certification checks (default: Red Hat Catalog API).")
+// parseFlags parses command-line flags from the given FlagSet and arguments.
+func parseFlags(fs *flag.FlagSet, args []string) (options, error) {
+	var opts options
 
-	opts := zap.Options{Development: true}
-	opts.BindFlags(flag.CommandLine)
-	flag.Parse()
+	fs.StringVar(&opts.metricsAddr, "metrics-bind-address", ":8080", "The address the metric endpoint binds to.")
+	fs.StringVar(&opts.probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
+	fs.StringVar(&opts.operatorNamespace, "operator-namespace", "", "Namespace where the operator runs (for probe DaemonSet).")
+	fs.StringVar(&opts.probeImage, "probe-image", probe.ProbeImage, "Probe DaemonSet container image.")
+	fs.DurationVar(&opts.probeExecTimeout, "probe-exec-timeout", probe.DefaultExecTimeout, "Timeout for probe command execution.")
+	fs.StringVar(&opts.certAPIURL, "certification-api-url", "", "Red Hat Pyxis API base URL for certification checks (default: Red Hat Catalog API).")
+	fs.StringVar(&opts.nodeName, "node-name", "", "Node name where the scanner pod runs.")
 
-	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
+	if err := fs.Parse(args); err != nil {
+		return options{}, fmt.Errorf("parsing flags: %w", err)
+	}
+	return opts, nil
+}
 
-	cfg := ctrl.GetConfigOrDie()
-
+// run executes the operator with the given options and rest config.
+func run(opts options, cfg *rest.Config) error {
 	mgr, err := ctrl.NewManager(cfg, ctrl.Options{
 		Scheme: scheme,
 		Metrics: metricsserver.Options{
-			BindAddress: metricsAddr,
+			BindAddress: opts.metricsAddr,
 		},
-		HealthProbeBindAddress: probeAddr,
+		HealthProbeBindAddress: opts.probeAddr,
 	})
 	if err != nil {
-		setupLog.Error(err, "unable to create manager")
-		os.Exit(1)
+		return fmt.Errorf("creating manager: %w", err)
 	}
 
 	// Create probe executor
-	var probeExecutor *probe.Executor
-	if cfg != nil {
-		probeExecutor, err = probe.NewExecutor(cfg, probeExecTimeout)
-		if err != nil {
-			setupLog.Error(err, "unable to create probe executor, probe-based checks will be skipped")
-		}
+	probeExecutor, err := probe.NewExecutor(cfg, opts.probeExecTimeout)
+	if err != nil {
+		setupLog.Error(err, "unable to create probe executor, probe-based checks will be skipped")
 	}
 
 	// Create discovery client for K8s version
 	k8sClientset, err := kubernetes.NewForConfig(cfg)
 	if err != nil {
-		setupLog.Error(err, "unable to create kubernetes clientset")
-		os.Exit(1)
+		return fmt.Errorf("creating kubernetes clientset: %w", err)
 	}
 
 	// Create scale client for CRD scaling checks
 	discoveryClient := k8sClientset.Discovery()
 	groupResources, err := restmapper.GetAPIGroupResources(discoveryClient)
 	if err != nil {
-		setupLog.Error(err, "unable to get API group resources for scale client")
-		os.Exit(1)
+		return fmt.Errorf("getting API group resources for scale client: %w", err)
 	}
 	mapper := restmapper.NewDiscoveryRESTMapper(groupResources)
 	resolver := scale.NewDiscoveryScaleKindResolver(discoveryClient)
 	scaleClient := scale.New(discoveryClient.RESTClient(), mapper, dynamic.LegacyAPIPathResolverFunc, resolver)
 
 	// Create certification validator
-	certValidator := certification.NewPyxisValidator(certAPIURL)
+	certValidator := certification.NewPyxisValidator(opts.certAPIURL)
 
 	if err := (&controller.ScannerReconciler{
 		Client:            mgr.GetClient(),
 		Scheme:            mgr.GetScheme(),
 		ProbeExecutor:     probeExecutor,
-		OperatorNamespace: operatorNamespace,
-		ProbeImage:        probeImage,
-		ScannerNodeName:   os.Getenv("NODE_NAME"),
+		OperatorNamespace: opts.operatorNamespace,
+		ProbeImage:        opts.probeImage,
+		ScannerNodeName:   opts.nodeName,
 		CertValidator:     certValidator,
 		DiscoveryClient:   discoveryClient,
 		K8sClientset:      k8sClientset,
 		ScaleClient:       scaleClient,
 	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "Scanner")
-		os.Exit(1)
+		return fmt.Errorf("creating controller: %w", err)
 	}
 
 	if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {
-		setupLog.Error(err, "unable to set up health check")
-		os.Exit(1)
+		return fmt.Errorf("setting up health check: %w", err)
 	}
 	if err := mgr.AddReadyzCheck("readyz", healthz.Ping); err != nil {
-		setupLog.Error(err, "unable to set up ready check")
-		os.Exit(1)
+		return fmt.Errorf("setting up ready check: %w", err)
 	}
 
 	setupLog.Info("starting manager")
-	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
-		setupLog.Error(err, "problem running manager")
+	return mgr.Start(ctrl.SetupSignalHandler())
+}
+
+func main() {
+	zapOpts := zap.Options{Development: true}
+	zapOpts.BindFlags(flag.CommandLine)
+
+	opts, err := parseFlags(flag.CommandLine, os.Args[1:])
+	if err != nil {
+		setupLog.Error(err, "unable to parse flags")
+		os.Exit(1)
+	}
+
+	// Fall back to environment variables when flags are not set
+	if opts.operatorNamespace == "" {
+		opts.operatorNamespace = os.Getenv("OPERATOR_NAMESPACE")
+	}
+	if opts.nodeName == "" {
+		opts.nodeName = os.Getenv("NODE_NAME")
+	}
+
+	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&zapOpts)))
+
+	cfg := ctrl.GetConfigOrDie()
+
+	if err := run(opts, cfg); err != nil {
+		setupLog.Error(err, "operator failed")
 		os.Exit(1)
 	}
 }
