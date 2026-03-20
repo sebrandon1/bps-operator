@@ -46,7 +46,7 @@ jobs:
           docker save bps-operator:e2e -o ${GITHUB_WORKSPACE}/bps-operator.tar
 
       - name: Deploy OCP cluster
-        uses: palmsoftware/quick-ocp@88f6e55e86f0f3449d7044918fd04a92536fe481 # v0.0.27
+        uses: palmsoftware/quick-ocp@01d7526f1af7433b4fc1e6566afdf426bc5addb5 # v0.0.28
         with:
           ocpPullSecret: $OCP_PULL_SECRET
           bundleCache: true
