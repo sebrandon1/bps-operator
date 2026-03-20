@@ -57,11 +57,33 @@ type ScanSummary struct {
 	Skipped int `json:"skipped"`
 }
 
+// Condition type constants for BestPracticeScanner.
+const (
+	ConditionScanComplete   = "ScanComplete"
+	ConditionProbeAvailable = "ProbeAvailable"
+)
+
+// Condition and event reason constants for BestPracticeScanner.
+const (
+	ReasonScanStarted     = "ScanStarted"
+	ReasonScanSucceeded   = "ScanSucceeded"
+	ReasonScanFailed      = "ScanFailed"
+	ReasonScanCompleted   = "ScanCompleted"
+	ReasonProbePodsReady  = "ProbePodsReady"
+	ReasonProbePodsFailed = "ProbePodsFailed"
+	ReasonProbeUnavailable = "ProbeUnavailable"
+)
+
 // BestPracticeScannerStatus defines the observed state of BestPracticeScanner.
 type BestPracticeScannerStatus struct {
 	// Phase is the current phase of the scanner.
 	// +optional
 	Phase ScannerPhase `json:"phase,omitempty"`
+	// Conditions represent the latest available observations of the scanner's state.
+	// +optional
+	// +listType=map
+	// +listMapKey=type
+	Conditions []metav1.Condition `json:"conditions,omitempty"`
 	// LastScanTime is the timestamp of the last completed scan.
 	// +optional
 	LastScanTime *metav1.Time `json:"lastScanTime,omitempty"`

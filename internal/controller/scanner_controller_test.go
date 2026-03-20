@@ -14,6 +14,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
@@ -43,7 +44,7 @@ func TestReconcile_ScannerNotFound(t *testing.T) {
 	s := newScheme()
 	c := fake.NewClientBuilder().WithScheme(s).Build()
 
-	r := &ScannerReconciler{Client: c, Scheme: s}
+	r := &ScannerReconciler{Client: c, Scheme: s, Recorder: record.NewFakeRecorder(10)}
 	result, err := r.Reconcile(context.Background(), ctrl.Request{
 		NamespacedName: types.NamespacedName{Name: "missing", Namespace: "test"},
 	})
@@ -67,7 +68,7 @@ func TestReconcile_Suspend(t *testing.T) {
 		WithStatusSubresource(scanner).
 		Build()
 
-	r := &ScannerReconciler{Client: c, Scheme: s}
+	r := &ScannerReconciler{Client: c, Scheme: s, Recorder: record.NewFakeRecorder(10)}
 	result, err := r.Reconcile(context.Background(), ctrl.Request{
 		NamespacedName: types.NamespacedName{Name: "test-scanner", Namespace: "test-ns"},
 	})
@@ -108,7 +109,7 @@ func TestReconcile_FullScan(t *testing.T) {
 		WithStatusSubresource(scanner).
 		Build()
 
-	r := &ScannerReconciler{Client: c, Scheme: s}
+	r := &ScannerReconciler{Client: c, Scheme: s, Recorder: record.NewFakeRecorder(10)}
 	_, err := r.Reconcile(context.Background(), ctrl.Request{
 		NamespacedName: types.NamespacedName{Name: "scanner", Namespace: "ns"},
 	})
@@ -171,7 +172,7 @@ func TestReconcile_NonCompliant(t *testing.T) {
 		WithStatusSubresource(scanner).
 		Build()
 
-	r := &ScannerReconciler{Client: c, Scheme: s}
+	r := &ScannerReconciler{Client: c, Scheme: s, Recorder: record.NewFakeRecorder(10)}
 	_, err := r.Reconcile(context.Background(), ctrl.Request{
 		NamespacedName: types.NamespacedName{Name: "scanner", Namespace: "ns"},
 	})
@@ -210,7 +211,7 @@ func TestReconcile_WithScanInterval(t *testing.T) {
 		WithStatusSubresource(scanner).
 		Build()
 
-	r := &ScannerReconciler{Client: c, Scheme: s}
+	r := &ScannerReconciler{Client: c, Scheme: s, Recorder: record.NewFakeRecorder(10)}
 	result, err := r.Reconcile(context.Background(), ctrl.Request{
 		NamespacedName: types.NamespacedName{Name: "scanner", Namespace: "ns"},
 	})
