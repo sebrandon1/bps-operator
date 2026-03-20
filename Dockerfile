@@ -8,7 +8,7 @@ RUN go mod download
 COPY . .
 RUN CGO_ENABLED=0 GOOS=linux go build -a -o manager ./cmd/
 
-FROM gcr.io/distroless/static@sha256:95dc0c7fc206cb973055b373128e1902ea06b289ad4f36a7faed4ded9eda30a6
+FROM gcr.io/distroless/static@sha256:47b2d72ff90843eb8a768b5c2f89b40741843b639d065b9b937b07cd59b479c6
 WORKDIR /
 COPY --from=builder /workspace/manager .
 USER 65532:65532
