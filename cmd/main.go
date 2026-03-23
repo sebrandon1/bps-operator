@@ -132,7 +132,7 @@ func run(opts options, cfg *rest.Config) error {
 	if err := (&controller.ScannerReconciler{
 		Client:            mgr.GetClient(),
 		Scheme:            mgr.GetScheme(),
-		Recorder:          mgr.GetEventRecorderFor("scanner"),
+		Recorder:          mgr.GetEventRecorderFor("scanner"), //nolint:staticcheck // TODO: migrate to GetEventRecorder (events.EventRecorder)
 		ProbeExecutor:     probeExecutor,
 		OperatorNamespace: opts.operatorNamespace,
 		ProbeImage:        opts.probeImage,
