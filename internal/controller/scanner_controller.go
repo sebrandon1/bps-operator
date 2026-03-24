@@ -37,6 +37,7 @@ type ScannerReconciler struct {
 	DiscoveryClient   discovery.ServerVersionInterface
 	K8sClientset      any // kubernetes.Interface
 	ScaleClient       any // scale.ScalesGetter
+	CatalogURLBase    string
 }
 
 // +kubebuilder:rbac:groups=bps.openshift.io,resources=bestpracticescanners,verbs=get;list;watch;create;update;patch;delete
@@ -298,8 +299,8 @@ func (r *ScannerReconciler) upsertResult(ctx context.Context, scannerCR *bpsv1al
 		}
 
 		var catalogURL string
-		if check.CatalogID != "" {
-			catalogURL = "https://github.com/redhat-best-practices-for-k8s/certsuite/blob/main/CATALOG.md#" + check.CatalogID
+		if check.CatalogID != "" && r.CatalogURLBase != "" {
+			catalogURL = r.CatalogURLBase + "#" + check.CatalogID
 		}
 
 		result.Spec = bpsv1alpha1.BestPracticeResultSpec{
