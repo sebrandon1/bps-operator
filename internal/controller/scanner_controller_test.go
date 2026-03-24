@@ -2,6 +2,7 @@ package controller
 
 import (
 	"context"
+	"os"
 	"testing"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -19,16 +20,13 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
-	"github.com/redhat-best-practices-for-k8s/checks/accesscontrol"
-	"github.com/redhat-best-practices-for-k8s/checks/certification"
-	"github.com/redhat-best-practices-for-k8s/checks/observability"
+	checksall "github.com/redhat-best-practices-for-k8s/checks/all"
 	bpsv1alpha1 "github.com/sebrandon1/bps-operator/api/v1alpha1"
 )
 
-func init() {
-	accesscontrol.Register()
-	certification.Register()
-	observability.Register()
+func TestMain(m *testing.M) {
+	checksall.Register()
+	os.Exit(m.Run())
 }
 
 func newScheme() *runtime.Scheme {
