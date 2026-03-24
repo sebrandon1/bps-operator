@@ -8,6 +8,8 @@ on:
   schedule:
     - cron: "0 4 * * *" # Nightly at 04:00 UTC
 
+# Only run on upstream (sebrandon1) repo — skip forks which lack required secrets
+
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
@@ -16,6 +18,7 @@ permissions: read-all
 
 jobs:
   e2e-ocp:
+    if: github.repository == 'sebrandon1/bps-operator'
     runs-on: ubuntu-24.04
     timeout-minutes: 120
     env:
