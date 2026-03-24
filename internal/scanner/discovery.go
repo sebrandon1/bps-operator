@@ -6,7 +6,6 @@ import (
 	"context"
 	"encoding/json"
 	"io"
-	"strings"
 
 	netattdefv1 "github.com/k8snetworkplumbingwg/network-attachment-definition-client/pkg/apis/k8s.cni.cncf.io/v1"
 	olmv1alpha1 "github.com/operator-framework/api/pkg/operators/v1alpha1"
@@ -20,8 +19,6 @@ import (
 	rbacv1 "k8s.io/api/rbac/v1"
 	storagev1 "k8s.io/api/storage/v1"
 	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -32,18 +29,10 @@ import (
 	"github.com/redhat-best-practices-for-k8s/checks"
 )
 
-// listRequired lists resources and returns an error on failure (for core K8s types that must exist).
-func listRequired(ctx context.Context, c client.Client, list client.ObjectList, opts ...client.ListOption) error {
-	return c.List(ctx, list, opts...)
-}
-
 // listOptional lists resources and silently returns false if the API is not registered (for OpenShift/OLM types).
 func listOptional(ctx context.Context, c client.Client, list client.ObjectList, opts ...client.ListOption) bool {
 	err := c.List(ctx, list, opts...)
-	if err == nil {
-		return true
-	}
-	return !meta.IsNoMatchError(err) && !errors.IsNotFound(err)
+	return err == nil
 }
 
 // Discover lists all relevant resources in the target namespace.
@@ -66,104 +55,104 @@ func Discover(ctx context.Context, c client.Client, namespace string, labelSelec
 	// --- Core K8s resources (required) ---
 
 	var pods corev1.PodList
-	if err := listRequired(ctx, c, &pods, labelOpts...); err != nil {
+	if err := c.List(ctx, &pods, labelOpts...); err != nil {
 		return nil, err
 	}
 	resources.Pods = pods.Items
 
 	var services corev1.ServiceList
-	if err := listRequired(ctx, c, &services, nsOpts...); err != nil {
+	if err := c.List(ctx, &services, nsOpts...); err != nil {
 		return nil, err
 	}
 	resources.Services = services.Items
 
 	var serviceAccounts corev1.ServiceAccountList
-	if err := listRequired(ctx, c, &serviceAccounts, nsOpts...); err != nil {
+	if err := c.List(ctx, &serviceAccounts, nsOpts...); err != nil {
 		return nil, err
 	}
 	resources.ServiceAccounts = serviceAccounts.Items
 
 	var roles rbacv1.RoleList
-	if err := listRequired(ctx, c, &roles, nsOpts...); err != nil {
+	if err := c.List(ctx, &roles, nsOpts...); err != nil {
 		return nil, err
 	}
 	resources.Roles = roles.Items
 
 	var roleBindings rbacv1.RoleBindingList
-	if err := listRequired(ctx, c, &roleBindings, nsOpts...); err != nil {
+	if err := c.List(ctx, &roleBindings, nsOpts...); err != nil {
 		return nil, err
 	}
 	resources.RoleBindings = roleBindings.Items
 
 	var crbs rbacv1.ClusterRoleBindingList
-	if err := listRequired(ctx, c, &crbs); err != nil {
+	if err := c.List(ctx, &crbs); err != nil {
 		return nil, err
 	}
 	resources.ClusterRoleBindings = crbs.Items
 
 	var crds apiextv1.CustomResourceDefinitionList
-	if err := listRequired(ctx, c, &crds); err != nil {
+	if err := c.List(ctx, &crds); err != nil {
 		return nil, err
 	}
 	resources.CRDs = crds.Items
 
 	var deployments appsv1.DeploymentList
-	if err := listRequired(ctx, c, &deployments, nsOpts...); err != nil {
+	if err := c.List(ctx, &deployments, nsOpts...); err != nil {
 		return nil, err
 	}
 	resources.Deployments = deployments.Items
 
 	var statefulSets appsv1.StatefulSetList
-	if err := listRequired(ctx, c, &statefulSets, nsOpts...); err != nil {
+	if err := c.List(ctx, &statefulSets, nsOpts...); err != nil {
 		return nil, err
 	}
 	resources.StatefulSets = statefulSets.Items
 
 	var daemonSets appsv1.DaemonSetList
-	if err := listRequired(ctx, c, &daemonSets, nsOpts...); err != nil {
+	if err := c.List(ctx, &daemonSets, nsOpts...); err != nil {
 		return nil, err
 	}
 	resources.DaemonSets = daemonSets.Items
 
 	var netPolicies networkingv1.NetworkPolicyList
-	if err := listRequired(ctx, c, &netPolicies, nsOpts...); err != nil {
+	if err := c.List(ctx, &netPolicies, nsOpts...); err != nil {
 		return nil, err
 	}
 	resources.NetworkPolicies = netPolicies.Items
 
 	var quotas corev1.ResourceQuotaList
-	if err := listRequired(ctx, c, &quotas, nsOpts...); err != nil {
+	if err := c.List(ctx, &quotas, nsOpts...); err != nil {
 		return nil, err
 	}
 	resources.ResourceQuotas = quotas.Items
 
 	var pdbs policyv1.PodDisruptionBudgetList
-	if err := listRequired(ctx, c, &pdbs, nsOpts...); err != nil {
+	if err := c.List(ctx, &pdbs, nsOpts...); err != nil {
 		return nil, err
 	}
 	resources.PodDisruptionBudgets = pdbs.Items
 
 	var nodes corev1.NodeList
-	if err := listRequired(ctx, c, &nodes); err != nil {
+	if err := c.List(ctx, &nodes); err != nil {
 		return nil, err
 	}
 	resources.Nodes = nodes.Items
 
 	var pvs corev1.PersistentVolumeList
-	if err := listRequired(ctx, c, &pvs); err != nil {
+	if err := c.List(ctx, &pvs); err != nil {
 		return nil, err
 	}
 	resources.PersistentVolumes = pvs.Items
 
 	var scs storagev1.StorageClassList
-	if err := listRequired(ctx, c, &scs); err != nil {
+	if err := c.List(ctx, &scs); err != nil {
 		return nil, err
 	}
 	resources.StorageClasses = scs.Items
 
 	// Helm chart releases (secrets with type helm.sh/release.v1)
 	var secrets corev1.SecretList
-	if err := listRequired(ctx, c, &secrets, nsOpts...); err != nil {
+	if err := c.List(ctx, &secrets, nsOpts...); err != nil {
 		return nil, err
 	}
 	for i := range secrets.Items {
@@ -190,7 +179,7 @@ func Discover(ctx context.Context, c client.Client, namespace string, labelSelec
 	if err := c.Get(ctx, types.NamespacedName{Name: "version"}, &cv); err == nil {
 		resources.ClusterVersion = &cv
 		resources.OpenshiftVersion = extractOpenshiftVersion(&cv)
-		resources.OCPStatus = deriveOCPStatus(&cv)
+		resources.OCPStatus = deriveOCPStatus(&cv, resources.OpenshiftVersion)
 	}
 
 	var cos configv1.ClusterOperatorList
@@ -376,8 +365,7 @@ func extractOpenshiftVersion(cv *configv1.ClusterVersion) string {
 }
 
 // deriveOCPStatus determines the lifecycle status from the ClusterVersion.
-func deriveOCPStatus(cv *configv1.ClusterVersion) string {
-	version := extractOpenshiftVersion(cv)
+func deriveOCPStatus(cv *configv1.ClusterVersion, version string) string {
 	if version == "" {
 		return ""
 	}
@@ -386,11 +374,6 @@ func deriveOCPStatus(cv *configv1.ClusterVersion) string {
 		if cond.Type == "Progressing" && cond.Status == configv1.ConditionTrue {
 			return "PreGA"
 		}
-	}
-
-	parts := strings.SplitN(version, ".", 3)
-	if len(parts) < 2 {
-		return "GA"
 	}
 
 	return "GA"

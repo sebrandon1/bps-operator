@@ -329,13 +329,13 @@ func (r *ScannerReconciler) completeScan(ctx context.Context, req ctrl.Request, 
 	logger := log.FromContext(ctx)
 
 	// Record metrics
-	labels := []string{scannerCR.Name, scannerCR.Namespace}
-	bpsmetrics.ScanDuration.WithLabelValues(labels...).Observe(scanDuration.Seconds())
-	bpsmetrics.ScanTotal.WithLabelValues(labels...).Inc()
-	bpsmetrics.CheckResults.WithLabelValues(scannerCR.Name, scannerCR.Namespace, "Compliant").Set(float64(summary.Compliant))
-	bpsmetrics.CheckResults.WithLabelValues(scannerCR.Name, scannerCR.Namespace, "NonCompliant").Set(float64(summary.NonCompliant))
-	bpsmetrics.CheckResults.WithLabelValues(scannerCR.Name, scannerCR.Namespace, "Skipped").Set(float64(summary.Skipped))
-	bpsmetrics.CheckResults.WithLabelValues(scannerCR.Name, scannerCR.Namespace, "Error").Set(float64(summary.Error))
+	name, ns := scannerCR.Name, scannerCR.Namespace
+	bpsmetrics.ScanDuration.WithLabelValues(name, ns).Observe(scanDuration.Seconds())
+	bpsmetrics.ScanTotal.WithLabelValues(name, ns).Inc()
+	bpsmetrics.CheckResults.WithLabelValues(name, ns, "Compliant").Set(float64(summary.Compliant))
+	bpsmetrics.CheckResults.WithLabelValues(name, ns, "NonCompliant").Set(float64(summary.NonCompliant))
+	bpsmetrics.CheckResults.WithLabelValues(name, ns, "Skipped").Set(float64(summary.Skipped))
+	bpsmetrics.CheckResults.WithLabelValues(name, ns, "Error").Set(float64(summary.Error))
 
 	// Re-fetch the scanner to avoid conflict errors from concurrent updates
 	if err := r.Get(ctx, req.NamespacedName, scannerCR); err != nil {
