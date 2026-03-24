@@ -26,21 +26,11 @@ import (
 
 	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 
+	checksall "github.com/redhat-best-practices-for-k8s/checks/all"
 	bpsv1alpha1 "github.com/sebrandon1/bps-operator/api/v1alpha1"
 	"github.com/sebrandon1/bps-operator/internal/certification"
 	"github.com/sebrandon1/bps-operator/internal/controller"
 	"github.com/sebrandon1/bps-operator/internal/probe"
-
-	// Register checks via init()
-	_ "github.com/redhat-best-practices-for-k8s/checks/accesscontrol"
-	_ "github.com/redhat-best-practices-for-k8s/checks/certification"
-	_ "github.com/redhat-best-practices-for-k8s/checks/lifecycle"
-	_ "github.com/redhat-best-practices-for-k8s/checks/manageability"
-	_ "github.com/redhat-best-practices-for-k8s/checks/networking"
-	_ "github.com/redhat-best-practices-for-k8s/checks/observability"
-	_ "github.com/redhat-best-practices-for-k8s/checks/operator"
-	_ "github.com/redhat-best-practices-for-k8s/checks/performance"
-	_ "github.com/redhat-best-practices-for-k8s/checks/platform"
 
 	// Register metrics
 	_ "github.com/sebrandon1/bps-operator/internal/metrics"
@@ -95,6 +85,7 @@ func parseFlags(fs *flag.FlagSet, args []string) (options, error) {
 
 // run executes the operator with the given options and rest config.
 func run(opts options, cfg *rest.Config) error {
+	checksall.Register()
 	mgr, err := ctrl.NewManager(cfg, ctrl.Options{
 		Scheme: scheme,
 		Metrics: metricsserver.Options{

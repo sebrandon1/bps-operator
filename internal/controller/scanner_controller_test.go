@@ -19,13 +19,17 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
+	"github.com/redhat-best-practices-for-k8s/checks/accesscontrol"
+	"github.com/redhat-best-practices-for-k8s/checks/certification"
+	"github.com/redhat-best-practices-for-k8s/checks/observability"
 	bpsv1alpha1 "github.com/sebrandon1/bps-operator/api/v1alpha1"
-
-	// Register checks
-	_ "github.com/redhat-best-practices-for-k8s/checks/accesscontrol"
-	_ "github.com/redhat-best-practices-for-k8s/checks/certification"
-	_ "github.com/redhat-best-practices-for-k8s/checks/observability"
 )
+
+func init() {
+	accesscontrol.Register()
+	certification.Register()
+	observability.Register()
+}
 
 func newScheme() *runtime.Scheme {
 	s := runtime.NewScheme()

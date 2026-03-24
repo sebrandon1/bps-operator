@@ -265,8 +265,8 @@ github.com/prometheus/otlptranslator v1.0.0 h1:s0LJW/iN9dkIH+EnhiD3BlkkP5QVIUVEo
 github.com/prometheus/otlptranslator v1.0.0/go.mod h1:vRYWnXvI6aWGpsdY/mOT/cbeVRBlPWtBNDb7kGR3uKM=
 github.com/prometheus/procfs v0.19.2 h1:zUMhqEW66Ex7OXIiDkll3tl9a1ZdilUOd/F6ZXw4Vws=
 github.com/prometheus/procfs v0.19.2/go.mod h1:M0aotyiemPhBCM0z5w87kL22CxfcH05ZpYlu+b4J7mw=
-github.com/redhat-best-practices-for-k8s/checks v0.0.4 h1:IeHZd2lsZlLbOQcOlUQ1roBi5YODgKn4wdbUFSKdQRU=
-github.com/redhat-best-practices-for-k8s/checks v0.0.4/go.mod h1:J2qHq9lMh0b5rpZw8z0JCAnOSmIH81rPu6d7isJqIIk=
+github.com/redhat-best-practices-for-k8s/checks v0.0.5 h1:qRHI04KFclueHguY8lY0ftYIOyhKksgodO9WQuthIJA=
+github.com/redhat-best-practices-for-k8s/checks v0.0.5/go.mod h1:YwfIgMvmM/p4MSRSV/+YZw3ddC71Oq7eXxKyKOAHrq8=
 github.com/redis/go-redis/extra/rediscmd/v9 v9.17.3 h1:v9RNP5ynWkruvzscrIoDyyv20c9YeyVn12L9nYnaexw=
 github.com/redis/go-redis/extra/rediscmd/v9 v9.17.3/go.mod h1:gdthSemCkR3WxTmzV2XxYIxClunkUJZAhL0zPHaB0Ww=
 github.com/redis/go-redis/extra/redisotel/v9 v9.17.3 h1:bF0e3fV7PL0knd1UHDtMud8wA7CZt3RSWtyTMhpnWd8=
