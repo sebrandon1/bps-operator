@@ -5,7 +5,7 @@ go 1.26.1
 require (
 	github.com/k8snetworkplumbingwg/network-attachment-definition-client v1.7.7
 	github.com/openshift/api v0.0.0-20260204104751-e09e5a4ebcd0
-	github.com/operator-framework/api v0.41.0
+	github.com/operator-framework/api v0.42.0
 	github.com/operator-framework/operator-lifecycle-manager v0.41.0
 	github.com/prometheus/client_golang v1.23.2
 	github.com/redhat-best-practices-for-k8s/checks v0.0.5

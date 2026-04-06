@@ -238,8 +238,8 @@ github.com/opencontainers/runtime-spec v1.3.0 h1:YZupQUdctfhpZy3TM39nN9Ika5CBWT5
 github.com/opencontainers/runtime-spec v1.3.0/go.mod h1:jwyrGlmzljRJv/Fgzds9SsS/C5hL+LL3ko9hs6T5lQ0=
 github.com/openshift/api v0.0.0-20260204104751-e09e5a4ebcd0 h1:mj1uTiMB24CUakpEcHr65f6dX8xmirVROnnfa4ukwHs=
 github.com/openshift/api v0.0.0-20260204104751-e09e5a4ebcd0/go.mod h1:d5uzF0YN2nQQFA0jIEWzzOZ+edmo6wzlGLvx5Fhz4uY=
-github.com/operator-framework/api v0.41.0 h1:B0nutndl95elbLXJGRlkFNTI8OuZIjSqvTEeORPhTKo=
-github.com/operator-framework/api v0.41.0/go.mod h1:Ouud+eqruzll9X3iv8wuAOTNAyyEncYXp4IVgbIlIdg=
+github.com/operator-framework/api v0.42.0 h1:rkc5V3zW8RxZMjePAe12jdL7Co/hwsYo1pLnkkhuR7s=
+github.com/operator-framework/api v0.42.0/go.mod h1:bMEj+wl/8tGqcGNtxt38cLUYagu9chNsbYzb/5HQaUQ=
 github.com/operator-framework/operator-lifecycle-manager v0.41.0 h1:t7NZbtKXojAqqGD1LwL0F8pdrlplzqVunMUgrwRdHJo=
 github.com/operator-framework/operator-lifecycle-manager v0.41.0/go.mod h1:1mj85s4T+COUThpspqLY96c+ngWXrEKJloed590pjJc=
 github.com/operator-framework/operator-registry v1.64.0 h1:aEz8ERg+p9U50LCk2Lda4kuhFrSnqDu37yLFs0ex0qE=
