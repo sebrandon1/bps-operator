@@ -2,11 +2,12 @@ package controller
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -40,6 +41,10 @@ type ScannerReconciler struct {
 	CatalogURLBase    string
 }
 
+const probeRequeueInterval = 5 * time.Second
+
+var errProbesPending = fmt.Errorf("probe pods not yet running")
+
 // +kubebuilder:rbac:groups=bps.openshift.io,resources=bestpracticescanners,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=bps.openshift.io,resources=bestpracticescanners/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=bps.openshift.io,resources=bestpracticescanners/finalizers,verbs=update
@@ -68,7 +73,7 @@ func (r *ScannerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	// Fetch the BestPracticeScanner CR
 	var scannerCR bpsv1alpha1.BestPracticeScanner
 	if err := r.Get(ctx, req.NamespacedName, &scannerCR); err != nil {
-		if errors.IsNotFound(err) {
+		if apierrors.IsNotFound(err) {
 			return ctrl.Result{}, nil
 		}
 		return ctrl.Result{}, err
@@ -138,6 +143,10 @@ func (r *ScannerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	scanStart := time.Now()
 
 	resources, err := r.discoverResources(ctx, &scannerCR, targetNS)
+	if errors.Is(err, errProbesPending) {
+		logger.Info("Probe pods not yet running, requeueing")
+		return ctrl.Result{RequeueAfter: probeRequeueInterval}, nil
+	}
 	if err != nil {
 		r.Recorder.Eventf(&scannerCR, corev1.EventTypeWarning, bpsv1alpha1.ReasonScanFailed, "Resource discovery failed: %v", err)
 		return ctrl.Result{}, err
@@ -178,7 +187,6 @@ func (r *ScannerReconciler) enforceUniqueness(ctx context.Context, scannerCR *bp
 	return nil
 }
 
-// discoverResources discovers cluster resources and wires probe/certification fields.
 func (r *ScannerReconciler) discoverResources(ctx context.Context, scannerCR *bpsv1alpha1.BestPracticeScanner, targetNS string) (*checks.DiscoveredResources, error) {
 	logger := log.FromContext(ctx)
 
@@ -211,9 +219,8 @@ func (r *ScannerReconciler) discoverResources(ctx context.Context, scannerCR *bp
 	resources.K8sClientset = r.K8sClientset
 	resources.ScaleClient = r.ScaleClient
 
-	// Map probe pods if available, waiting for at least one to be Running
 	if r.OperatorNamespace != "" {
-		probePods, err := probe.WaitForProbePods(ctx, r.Client, r.OperatorNamespace, 2*time.Minute)
+		probePods, err := probe.MapProbePods(ctx, r.Client, r.OperatorNamespace)
 		if err != nil {
 			logger.Error(err, "Failed to map probe pods, probe-based checks will be skipped")
 			r.Recorder.Event(scannerCR, corev1.EventTypeWarning, bpsv1alpha1.ReasonProbeUnavailable, "Probe pods not available, probe-based checks will be skipped")
@@ -224,6 +231,8 @@ func (r *ScannerReconciler) discoverResources(ctx context.Context, scannerCR *bp
 				Message:            err.Error(),
 				ObservedGeneration: scannerCR.Generation,
 			})
+		} else if len(probePods) == 0 {
+			return nil, errProbesPending
 		} else {
 			resources.ProbePods = probePods
 			resources.ProbeExecutor = r.ProbeExecutor
@@ -406,7 +415,7 @@ func (r *ScannerReconciler) deleteStaleResults(ctx context.Context, scannerCR *b
 	for i := range resultList.Items {
 		result := &resultList.Items[i]
 		if !currentNames[result.Name] {
-			if err := r.Delete(ctx, result); err != nil && !errors.IsNotFound(err) {
+			if err := r.Delete(ctx, result); err != nil && !apierrors.IsNotFound(err) {
 				return err
 			}
 		}

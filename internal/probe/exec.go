@@ -36,12 +36,10 @@ func NewExecutor(config *rest.Config, timeout time.Duration) (*Executor, error) 
 	return &Executor{clientset: cs, config: config, timeout: timeout}, nil
 }
 
-// ExecCommand runs a command on the probe container of the given pod and returns stdout/stderr.
 func (e *Executor) ExecCommand(ctx context.Context, pod *corev1.Pod, command string) (string, string, error) {
 	return e.ExecCommandInContainer(ctx, pod, ProbeName, command)
 }
 
-// ExecCommandInContainer runs a command in a specific container of the given pod and returns stdout/stderr.
 func (e *Executor) ExecCommandInContainer(ctx context.Context, pod *corev1.Pod, containerName, command string) (string, string, error) {
 	ctx, cancel := context.WithTimeout(ctx, e.timeout)
 	defer cancel()
