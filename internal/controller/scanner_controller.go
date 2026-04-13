@@ -211,9 +211,9 @@ func (r *ScannerReconciler) discoverResources(ctx context.Context, scannerCR *bp
 	resources.K8sClientset = r.K8sClientset
 	resources.ScaleClient = r.ScaleClient
 
-	// Map probe pods if available
+	// Map probe pods if available, waiting for at least one to be Running
 	if r.OperatorNamespace != "" {
-		probePods, err := probe.MapProbePods(ctx, r.Client, r.OperatorNamespace)
+		probePods, err := probe.WaitForProbePods(ctx, r.Client, r.OperatorNamespace, 2*time.Minute)
 		if err != nil {
 			logger.Error(err, "Failed to map probe pods, probe-based checks will be skipped")
 			r.Recorder.Event(scannerCR, corev1.EventTypeWarning, bpsv1alpha1.ReasonProbeUnavailable, "Probe pods not available, probe-based checks will be skipped")
