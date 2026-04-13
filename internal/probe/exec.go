@@ -36,15 +36,13 @@ func NewExecutor(config *rest.Config, timeout time.Duration) (*Executor, error) 
 	return &Executor{clientset: cs, config: config, timeout: timeout}, nil
 }
 
-// ExecCommand runs a command on the given probe pod and returns stdout/stderr.
-//
-// Security considerations:
-//   - Commands are executed via Kubernetes RBAC-controlled pods/exec API
-//   - Execution requires explicit pods/exec permissions in ClusterRole
-//   - All commands have a configurable timeout to prevent resource exhaustion
-//   - Commands run in probe container context (not host context directly)
-//   - Audit trail available via Kubernetes API server logs
+// ExecCommand runs a command on the probe container of the given pod and returns stdout/stderr.
 func (e *Executor) ExecCommand(ctx context.Context, pod *corev1.Pod, command string) (string, string, error) {
+	return e.ExecCommandInContainer(ctx, pod, ProbeName, command)
+}
+
+// ExecCommandInContainer runs a command in a specific container of the given pod and returns stdout/stderr.
+func (e *Executor) ExecCommandInContainer(ctx context.Context, pod *corev1.Pod, containerName, command string) (string, string, error) {
 	ctx, cancel := context.WithTimeout(ctx, e.timeout)
 	defer cancel()
 
@@ -54,7 +52,7 @@ func (e *Executor) ExecCommand(ctx context.Context, pod *corev1.Pod, command str
 		Namespace(pod.Namespace).
 		SubResource("exec").
 		VersionedParams(&corev1.PodExecOptions{
-			Container: ProbeName,
+			Container: containerName,
 			Command:   []string{"/bin/sh", "-c", command},
 			Stdout:    true,
 			Stderr:    true,

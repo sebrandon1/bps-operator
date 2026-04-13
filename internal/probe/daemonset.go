@@ -48,6 +48,7 @@ package probe
 import (
 	"context"
 	"fmt"
+	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -55,6 +56,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/wait"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -119,6 +121,23 @@ func MapProbePods(ctx context.Context, c client.Client, namespace string) (map[s
 		if pod.Status.Phase == corev1.PodRunning {
 			result[pod.Spec.NodeName] = pod
 		}
+	}
+	return result, nil
+}
+
+// WaitForProbePods polls until at least one probe pod is Running or the timeout expires.
+func WaitForProbePods(ctx context.Context, c client.Client, namespace string, timeout time.Duration) (map[string]*corev1.Pod, error) {
+	var result map[string]*corev1.Pod
+	err := wait.PollUntilContextTimeout(ctx, 2*time.Second, timeout, true, func(ctx context.Context) (bool, error) {
+		pods, err := MapProbePods(ctx, c, namespace)
+		if err != nil {
+			return false, err
+		}
+		result = pods
+		return len(pods) > 0, nil
+	})
+	if err != nil {
+		return result, fmt.Errorf("waiting for probe pods: %w", err)
 	}
 	return result, nil
 }
