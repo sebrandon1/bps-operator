@@ -68,6 +68,7 @@ var errProbesPending = fmt.Errorf("probe pods not yet running")
 // +kubebuilder:rbac:groups=sriovnetwork.openshift.io,resources=sriovnetworks;sriovnetworknodepolicies,verbs=get;list;watch
 // +kubebuilder:rbac:groups="",resources=events,verbs=create;patch
 
+// Reconcile handles a single BestPracticeScanner CR: discovers resources, runs checks, and upserts results.
 func (r *ScannerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
 
@@ -272,7 +273,7 @@ func (r *ScannerReconciler) runChecks(ctx context.Context, scannerCR *bpsv1alpha
 			summary.Skipped++
 		}
 
-		resultName := fmt.Sprintf("%s-%s", scannerCR.Name, check.Name)
+		resultName := fmt.Sprintf("%s.%s", scannerCR.Name, check.Name)
 		resultNames[resultName] = true
 
 		r.upsertResult(ctx, scannerCR, check, checkResult, resultName, now)
