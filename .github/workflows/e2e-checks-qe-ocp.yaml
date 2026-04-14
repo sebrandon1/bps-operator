@@ -1,0 +1,98 @@
+name: E2E checks-qe OCP Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: "0 4 * * *"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions: read-all
+
+jobs:
+  e2e-checks-qe-ocp:
+    if: github.repository == 'sebrandon1/bps-operator' && github.actor != 'dependabot[bot]'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    env:
+      KUBECONFIG: '/home/runner/.crc/machines/crc/kubeconfig'
+    steps:
+      - name: Checkout bps-operator
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Setup Go
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
+        with:
+          go-version-file: go.mod
+
+      - name: Install controller-gen
+        run: go install sigs.k8s.io/controller-tools/cmd/controller-gen@latest
+
+      - name: Check if CRC_PULL_SECRET exists
+        env:
+          super_secret: ${{ secrets.CRC_PULL_SECRET }}
+        if: ${{ env.super_secret == '' }}
+        run: |
+          echo "CRC_PULL_SECRET is not set"
+          exit 1
+
+      - name: Build and save image
+        run: |
+          docker build -t bps-operator:e2e .
+          docker save bps-operator:e2e -o ${GITHUB_WORKSPACE}/bps-operator.tar
+
+      - name: Deploy OCP cluster
+        uses: palmsoftware/quick-ocp@fbe7eddbdbae7e1e983dcf8c83d593d7f2be6a1f # v0.0.30
+        with:
+          ocpPullSecret: $OCP_PULL_SECRET
+          bundleCache: true
+          desiredOCPVersion: 4.21
+          waitForOperatorsReady: true
+        env:
+          OCP_PULL_SECRET: ${{ secrets.CRC_PULL_SECRET }}
+
+      - name: Push image to OpenShift internal registry
+        run: |
+          docker load -i ${GITHUB_WORKSPACE}/bps-operator.tar
+          KUBEADMIN_PASS=$(cat ~/.crc/machines/crc/kubeadmin-password)
+          oc login -u kubeadmin -p "$KUBEADMIN_PASS" https://api.crc.testing:6443 --insecure-skip-tls-verify
+          oc patch configs.imageregistry.operator.openshift.io/cluster --type merge -p '{"spec":{"defaultRoute":true}}'
+          sleep 10
+          REGISTRY=$(oc get route default-route -n openshift-image-registry -o jsonpath='{.spec.host}')
+          docker login -u kubeadmin -p "$(oc whoami -t)" "$REGISTRY"
+          oc new-project bps-operator-system 2>/dev/null || true
+          REMOTE_IMG="$REGISTRY/bps-operator-system/bps-operator:e2e"
+          docker tag bps-operator:e2e "$REMOTE_IMG"
+          docker push "$REMOTE_IMG"
+          echo "INTERNAL_IMG=image-registry.openshift-image-registry.svc:5000/bps-operator-system/bps-operator:e2e" >> "$GITHUB_ENV"
+
+      - name: Deploy operator
+        run: |
+          make manifests
+          oc apply -f config/crd/bases/
+          oc apply -f config/rbac/
+          oc apply -f config/manager/
+          oc set image deployment/bps-operator-controller-manager manager=$INTERNAL_IMG -n bps-operator-system
+          oc patch deployment bps-operator-controller-manager -n bps-operator-system \
+            -p '{"spec":{"template":{"spec":{"containers":[{"name":"manager","imagePullPolicy":"Always"}]}}}}'
+
+      - name: Wait for operator to be ready
+        run: oc rollout status deployment/bps-operator-controller-manager -n bps-operator-system --timeout=120s
+
+      - name: Checkout checks-qe
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          repository: redhat-best-practices-for-k8s/checks-qe
+          path: checks-qe
+
+      - name: Build checks-qe
+        run: go build -o checks-qe-bin ./cmd/checks-qe
+        working-directory: checks-qe
+
+      - name: Run checks-qe in operator mode
+        run: ./checks-qe/checks-qe-bin run --mode operator --skip-probe --parallel 4 --verbose
