@@ -103,6 +103,7 @@ func DeleteDaemonSet(ctx context.Context, c client.Client, namespace string) err
 	return err
 }
 
+// MapProbePods returns a map of node name to running probe pod for the given namespace.
 func MapProbePods(ctx context.Context, c client.Client, namespace string) (map[string]*corev1.Pod, error) {
 	var podList corev1.PodList
 	if err := c.List(ctx, &podList,
