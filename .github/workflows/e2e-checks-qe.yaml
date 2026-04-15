@@ -18,6 +18,8 @@ jobs:
   e2e-checks-qe:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
+    env:
+      CHECKS_QE_IMAGE: quay.io/redhat-best-practices-for-k8s/checks-qe:unstable
     steps:
       - name: Checkout bps-operator
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -49,15 +51,11 @@ jobs:
             -p '{"spec":{"template":{"spec":{"containers":[{"name":"manager","imagePullPolicy":"IfNotPresent"}]}}}}'
           kubectl rollout status deployment/bps-operator-controller-manager -n bps-operator-system --timeout=120s
 
-      - name: Checkout checks-qe
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-        with:
-          repository: redhat-best-practices-for-k8s/checks-qe
-          path: checks-qe
-
-      - name: Build checks-qe
-        run: go build -o checks-qe-bin ./cmd/checks-qe
-        working-directory: checks-qe
-
       - name: Run checks-qe in operator mode
-        run: ./checks-qe/checks-qe-bin run --mode operator --skip-ocp --skip-probe --parallel 4 --verbose
+        run: |
+          docker run --rm \
+            --network host \
+            -v $HOME/.kube/config:/tmp/kubeconfig:ro \
+            -e KUBECONFIG=/tmp/kubeconfig \
+            $CHECKS_QE_IMAGE \
+            run --mode operator --skip-ocp --skip-probe --parallel 4 --verbose

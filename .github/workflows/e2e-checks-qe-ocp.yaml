@@ -21,6 +21,7 @@ jobs:
     timeout-minutes: 120
     env:
       KUBECONFIG: '/home/runner/.crc/machines/crc/kubeconfig'
+      CHECKS_QE_IMAGE: quay.io/redhat-best-practices-for-k8s/checks-qe:unstable
     steps:
       - name: Checkout bps-operator
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -84,15 +85,11 @@ jobs:
       - name: Wait for operator to be ready
         run: oc rollout status deployment/bps-operator-controller-manager -n bps-operator-system --timeout=120s
 
-      - name: Checkout checks-qe
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-        with:
-          repository: redhat-best-practices-for-k8s/checks-qe
-          path: checks-qe
-
-      - name: Build checks-qe
-        run: go build -o checks-qe-bin ./cmd/checks-qe
-        working-directory: checks-qe
-
       - name: Run checks-qe in operator mode
-        run: ./checks-qe/checks-qe-bin run --mode operator --skip-probe --parallel 4 --verbose
+        run: |
+          docker run --rm \
+            --network host \
+            -v $KUBECONFIG:/tmp/kubeconfig:ro \
+            -e KUBECONFIG=/tmp/kubeconfig \
+            $CHECKS_QE_IMAGE \
+            run --mode operator --skip-probe --parallel 4 --verbose
