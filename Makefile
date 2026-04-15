@@ -4,7 +4,7 @@ TEST_NAMESPACE ?= bps-test
 KIND_CLUSTER_NAME ?= kind
 
 # Use oc if available, fall back to kubectl
-KUBECTL ?= $(shell command -v oc 2>/dev/null || echo kubectl)
+KUBECTL ?= $(shell command -v oc >/dev/null 2>&1 && echo oc || echo kubectl)
 
 .PHONY: build
 build:
@@ -113,7 +113,7 @@ uninstall: ## Remove CRDs from the cluster
 	$(KUBECTL) delete --ignore-not-found -f config/crd/bases/
 
 .PHONY: deploy
-deploy: manifests ## Deploy the operator (CRDs + RBAC + manager Deployment)
+deploy: manifests _ensure-operator-ns ## Deploy the operator (CRDs + RBAC + manager Deployment)
 	$(KUBECTL) apply -f config/crd/bases/
 	$(KUBECTL) apply -f config/rbac/
 	$(KUBECTL) apply -f config/manager/
@@ -124,13 +124,20 @@ undeploy: ## Remove the operator from the cluster
 	$(KUBECTL) delete --ignore-not-found -f config/rbac/
 	$(KUBECTL) delete --ignore-not-found -f config/crd/bases/
 
-##@ Local Development
+##@ Helpers
 
-.PHONY: run
-run: install ## Run the operator locally against the current cluster
-	go run ./cmd/ --operator-namespace=$(OPERATOR_NAMESPACE)
-
-##@ Test Workloads
+# Helper: ensure the operator namespace exists with required privileges for the probe DaemonSet
+.PHONY: _ensure-operator-ns
+_ensure-operator-ns:
+	@$(KUBECTL) create namespace $(OPERATOR_NAMESPACE) --dry-run=client -o yaml | $(KUBECTL) apply -f - 2>/dev/null
+	@if $(KUBECTL) api-resources --api-group=security.openshift.io 2>/dev/null | grep -q securitycontextconstraints; then \
+		$(KUBECTL) label namespace $(OPERATOR_NAMESPACE) \
+			security.openshift.io/scc.podSecurityLabelSync=false \
+			pod-security.kubernetes.io/enforce=privileged \
+			pod-security.kubernetes.io/warn=privileged \
+			pod-security.kubernetes.io/audit=privileged --overwrite 2>/dev/null; \
+		$(KUBECTL) adm policy add-scc-to-user privileged -z default -n $(OPERATOR_NAMESPACE) 2>/dev/null || true; \
+	fi
 
 # Helper: deploy test workloads and prepare namespace (no scanner CR)
 .PHONY: _deploy-test-workloads
@@ -139,64 +146,70 @@ _deploy-test-workloads: install
 	@$(KUBECTL) delete --ignore-not-found -f config/samples/scanner_bps_test.yaml 2>/dev/null || true
 	@$(KUBECTL) delete --ignore-not-found -f config/samples/scanner_bps_test_periodic.yaml 2>/dev/null || true
 	$(KUBECTL) apply -f config/samples/test-workloads.yaml
-	@if $(KUBECTL) api-resources 2>/dev/null | grep -q securitycontextconstraints; then \
+	@if $(KUBECTL) api-resources --api-group=security.openshift.io 2>/dev/null | grep -q securitycontextconstraints; then \
 		echo "OpenShift detected — granting privileged SCC to default SA in $(TEST_NAMESPACE)"; \
 		$(KUBECTL) adm policy add-scc-to-user privileged -z default -n $(TEST_NAMESPACE); \
 	fi
 	@echo "Waiting for namespace to be ready..."
 	@$(KUBECTL) wait --for=jsonpath='{.status.phase}'=Active namespace/$(TEST_NAMESPACE) --timeout=10s
 
+##@ Scanning
+
 .PHONY: deploy-test
 deploy-test: _deploy-test-workloads ## Deploy test workloads only (no scanner CR)
 	@echo ""
-	@echo "Test workloads deployed to $(TEST_NAMESPACE)."
-	@echo "Use 'make deploy-scan' or 'make deploy-periodic-scan' to add a scanner."
+	@echo "=== Test Workloads Deployed ==="
+	@echo "  Namespace:  $(TEST_NAMESPACE)"
+	@echo "  Pods:       good-pod (compliant), bad-pod (non-compliant)"
+	@echo "  Services:   good-clusterip-svc, bad-nodeport-svc"
+	@echo ""
+	@echo "Next steps:"
+	@echo "  1. Run a scan:    make deploy-scan  OR  make deploy-periodic-scan"
+	@echo "  2. View results:  make show-results"
 
 .PHONY: deploy-scan
-deploy-scan: _deploy-test-workloads ## Deploy test workloads + one-shot scanner into bps-test namespace
+deploy-scan: deploy _deploy-test-workloads ## Deploy operator, run one-shot scan, show results
+	@echo "Waiting for operator to be ready..."
+	@$(KUBECTL) rollout status deployment/bps-operator-controller-manager -n $(OPERATOR_NAMESPACE) --timeout=120s
 	$(KUBECTL) apply -f config/samples/scanner_bps_test.yaml
 	@echo ""
-	@echo "One-shot scanner deployed to $(TEST_NAMESPACE)."
-	@echo "Run 'make run' in another terminal to start the operator."
-	@echo "Then: $(KUBECTL) get bestpracticeresults -n $(TEST_NAMESPACE)"
+	@echo "=== One-Shot Scan ==="
+	@echo "  Namespace:  $(TEST_NAMESPACE)"
+	@echo ""
+	@echo "Waiting for scan to complete..."
+	@for i in $$(seq 1 60); do \
+		PHASE=$$($(KUBECTL) get bestpracticescanners test-scanner -n $(TEST_NAMESPACE) -o jsonpath='{.status.phase}' 2>/dev/null); \
+		if [ "$$PHASE" = "Completed" ]; then break; fi; \
+		if [ $$i -eq 60 ]; then echo "Timed out waiting for scan (phase: $$PHASE)"; fi; \
+		sleep 2; \
+	done
+	@echo ""
+	@$(MAKE) show-results
 
 .PHONY: deploy-periodic-scan
-deploy-periodic-scan: _deploy-test-workloads ## Deploy test workloads + periodic scanner (5m interval) into bps-test namespace
+deploy-periodic-scan: deploy _deploy-test-workloads ## Deploy operator, start periodic scan (5m interval)
+	@echo "Waiting for operator to be ready..."
+	@$(KUBECTL) rollout status deployment/bps-operator-controller-manager -n $(OPERATOR_NAMESPACE) --timeout=120s
 	$(KUBECTL) apply -f config/samples/scanner_bps_test_periodic.yaml
 	@echo ""
-	@echo "Periodic scanner deployed to $(TEST_NAMESPACE) (interval: 5m)."
-	@echo "Run 'make run' in another terminal to start the operator."
-	@echo "Then: $(KUBECTL) get bestpracticeresults -n $(TEST_NAMESPACE)"
+	@echo "=== Periodic Scan Started ==="
+	@echo "  Namespace:  $(TEST_NAMESPACE)"
+	@echo "  Interval:   every 5m"
+	@echo ""
+	@echo "View results:  make show-results"
+	@echo "View failures: make show-failures"
 
 .PHONY: undeploy-test
 undeploy-test: ## Remove test workloads, scanner, and bps-test namespace
 	$(KUBECTL) delete --ignore-not-found -f config/samples/scanner_bps_test_periodic.yaml
 	$(KUBECTL) delete --ignore-not-found -f config/samples/scanner_bps_test.yaml
 	$(KUBECTL) delete --ignore-not-found -f config/samples/test-workloads.yaml
-	@if $(KUBECTL) api-resources 2>/dev/null | grep -q securitycontextconstraints; then \
+	@if $(KUBECTL) api-resources --api-group=security.openshift.io 2>/dev/null | grep -q securitycontextconstraints; then \
 		$(KUBECTL) adm policy remove-scc-from-user privileged -z default -n $(TEST_NAMESPACE) 2>/dev/null || true; \
 	fi
 
 .PHONY: scan
-scan: install ## One-shot: deploy test workloads, run operator, show results, then stop
-	@$(MAKE) deploy-scan
-	@echo ""
-	@echo "Starting operator..."
-	@go run ./cmd/ --operator-namespace=$(OPERATOR_NAMESPACE) &>/tmp/bps-operator.log & \
-		PID=$$!; \
-		echo "Operator PID: $$PID"; \
-		echo "Waiting for scan to complete..."; \
-		for i in $$(seq 1 30); do \
-			PHASE=$$($(KUBECTL) get bestpracticescanners test-scanner -n $(TEST_NAMESPACE) -o jsonpath='{.status.phase}' 2>/dev/null); \
-			if [ "$$PHASE" = "Completed" ]; then break; fi; \
-			sleep 1; \
-		done; \
-		echo ""; \
-		$(MAKE) show-results; \
-		kill $$PID 2>/dev/null; \
-		wait $$PID 2>/dev/null; \
-		echo ""; \
-		echo "Operator stopped. Full logs at /tmp/bps-operator.log"
+scan: deploy-scan ## Alias for deploy-scan
 
 .PHONY: show-results
 show-results: ## Show scan results from the cluster
