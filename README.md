@@ -8,21 +8,21 @@ bps-operator watches for `BestPracticeScanner` custom resources and runs a confi
 
 ## Quick Start
 
+**Prerequisites**: A running Kubernetes or OpenShift cluster with `kubectl`/`oc` configured.
+
 ```bash
-# Install CRDs
-make install
+# One-shot scan — deploys operator in-cluster, runs all checks, shows results
+make deploy-scan
 
-# Deploy test workloads and a scanner CR
-make deploy-test
+# Or for continuous scanning every 5 minutes
+make deploy-periodic-scan
 
-# Run the operator locally (in another terminal)
-make run
-
-# View results
+# View results anytime
 make show-results
-
-# View failures only
 make show-failures
+
+# Clean up everything
+make clean
 ```
 
 ## CRD API
@@ -58,17 +58,19 @@ Records the outcome of a single check.
 
 ## Checks Summary
 
-57 checks across 7 categories:
+105 checks across 9 categories (provided by [redhat-best-practices-for-k8s/checks](https://github.com/redhat-best-practices-for-k8s/checks)):
 
-| Category | Count | README |
-|---|---|---|
-| Access Control | 24 | [internal/checks/accesscontrol/](internal/checks/accesscontrol/README.md) |
-| Lifecycle | 14 | [internal/checks/lifecycle/](internal/checks/lifecycle/README.md) |
-| Platform | 7 | [internal/checks/platform/](internal/checks/platform/README.md) |
-| Networking | 4 | [internal/checks/networking/](internal/checks/networking/README.md) |
-| Observability | 3 | [internal/checks/observability/](internal/checks/observability/README.md) |
-| Performance | 3 | [internal/checks/performance/](internal/checks/performance/README.md) |
-| Manageability | 2 | [internal/checks/manageability/](internal/checks/manageability/README.md) |
+| Category | Count |
+|---|---|
+| Access Control | 28 |
+| Lifecycle | 19 |
+| Platform Alteration | 15 |
+| Operator | 12 |
+| Networking | 11 |
+| Performance | 9 |
+| Observability | 5 |
+| Affiliated Certification | 4 |
+| Manageability | 2 |
 
 ## Usage
 
@@ -78,12 +80,11 @@ Records the outcome of a single check.
 | `make test` | Run unit tests with coverage |
 | `make lint` | Run golangci-lint |
 | `make install` | Install CRDs onto the cluster |
-| `make run` | Run the operator locally against the current cluster |
 | `make deploy` | Deploy operator to the cluster (CRDs + RBAC + manager) |
 | `make deploy-test` | Deploy test workloads only (no scanner) into `bps-test` namespace |
-| `make deploy-scan` | Deploy test workloads and one-shot scanner into `bps-test` namespace |
-| `make deploy-periodic-scan` | Deploy test workloads and periodic scanner (5m interval) into `bps-test` namespace |
-| `make scan` | One-shot: deploy test workloads, run operator, show results, stop |
+| `make deploy-scan` | Deploy operator, run one-shot scan, show results |
+| `make deploy-periodic-scan` | Deploy operator, start periodic scan (5m interval) |
+| `make scan` | Alias for `deploy-scan` |
 | `make show-results` | Show scan results from the cluster |
 | `make show-failures` | Show details for all non-compliant results |
 | `make show-scan-yaml` | Print the one-shot scanner CR YAML |
@@ -118,7 +119,7 @@ spec:
 - **targetNamespace**: Which namespace to scan. Defaults to the CR's own namespace.
 - **labelSelector**: Filter pods by labels. Omit to scan all pods in the namespace.
 - **scanInterval**: How often to re-scan (e.g., "5m", "1h30m", "10s"). Must be a valid Go duration string. Omit for a one-shot scan. The API validates this format at admission time, rejecting invalid durations like "5mins" or "1 hour".
-- **checks**: Run only specific checks by name. Omit to run all 57 checks.
+- **checks**: Run only specific checks by name. Omit to run all checks.
 - **suspend**: Set to `true` to pause periodic scanning.
 
 ## Architecture
@@ -129,14 +130,7 @@ api/v1alpha1/            CRD type definitions (BestPracticeScanner, BestPractice
 internal/
   controller/            Reconciler for BestPracticeScanner CRs
   scanner/               Orchestrates check execution and result creation
-  checks/                Check registry and per-category implementations
-    accesscontrol/       24 access-control checks
-    lifecycle/           14 lifecycle checks
-    networking/          4 networking checks
-    observability/       3 observability checks
-    performance/         3 performance checks
-    platform/            7 platform checks
-    manageability/       2 manageability checks
+  certification/         Red Hat container certification validation
   probe/                 Probe DaemonSet for exec-based checks
 config/
   crd/bases/             Generated CRD manifests
@@ -144,6 +138,8 @@ config/
   manager/               Operator Deployment manifest
   samples/               Example CRs and test workloads
 ```
+
+Check implementations are provided by the external [redhat-best-practices-for-k8s/checks](https://github.com/redhat-best-practices-for-k8s/checks) library.
 
 ## Security Model
 
@@ -183,22 +179,6 @@ The probe runs with elevated privileges to enable checks such as:
 Checks that only inspect Kubernetes API objects (pods, services, RBAC, etc.) run directly in the operator without elevated privileges.
 
 For detailed security documentation, see [internal/probe/daemonset.go](internal/probe/daemonset.go).
-
-## Building and Running
-
-```bash
-# Build locally
-make build
-
-# Run against current kubeconfig
-make run
-
-# Build container image
-make build-image IMG=my-registry/bps-operator:dev
-
-# Deploy to cluster
-make deploy IMG=my-registry/bps-operator:dev
-```
 
 ## Certsuite Alignment
 

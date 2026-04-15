@@ -20,6 +20,7 @@ import (
 	"k8s.io/client-go/restmapper"
 	"k8s.io/client-go/scale"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
@@ -92,6 +93,14 @@ func run(opts options, cfg *rest.Config) error {
 			BindAddress: opts.metricsAddr,
 		},
 		HealthProbeBindAddress: opts.probeAddr,
+		Client: client.Options{
+			Cache: &client.CacheOptions{
+				// PackageManifest is a virtual resource from OLM package-server that does not support Watch.
+				DisableFor: []client.Object{
+					&olmpackagev1.PackageManifest{},
+				},
+			},
+		},
 	})
 	if err != nil {
 		return fmt.Errorf("creating manager: %w", err)
