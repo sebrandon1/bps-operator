@@ -10,6 +10,21 @@ bps-operator watches for `BestPracticeScanner` custom resources and runs a confi
 
 **Prerequisites**: A running Kubernetes or OpenShift cluster with `kubectl`/`oc` configured.
 
+### Without Cloning
+
+```bash
+# Deploy the operator
+kubectl apply -f https://raw.githubusercontent.com/sebrandon1/bps-operator/main/install.yaml
+
+# Create a scanner in your namespace (scans all pods)
+kubectl apply -f https://raw.githubusercontent.com/sebrandon1/bps-operator/main/config/samples/scanner_sample.yaml
+
+# View results
+kubectl get bestpracticeresults -n default
+```
+
+### With the Repo
+
 ```bash
 git clone https://github.com/sebrandon1/bps-operator.git && cd bps-operator
 
@@ -82,6 +97,7 @@ Records the outcome of a single check.
 | `make test` | Run unit tests with coverage |
 | `make lint` | Run golangci-lint |
 | `make install` | Install CRDs onto the cluster |
+| `make install-yaml` | Generate `install.yaml` with all resources for remote deployment |
 | `make deploy` | Deploy operator to the cluster (CRDs + RBAC + manager) |
 | `make deploy-test` | Deploy test workloads only (no scanner) into `bps-test` namespace |
 | `make deploy-scan` | Deploy operator, run one-shot scan, show results |
