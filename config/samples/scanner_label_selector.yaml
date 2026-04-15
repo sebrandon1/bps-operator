@@ -1,0 +1,10 @@
+apiVersion: bps.openshift.io/v1alpha1
+kind: BestPracticeScanner
+metadata:
+  name: targeted-scanner
+  namespace: default
+spec:
+  targetNamespace: default
+  labelSelector:
+    matchLabels:
+      app: my-workload
