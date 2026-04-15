@@ -11,6 +11,8 @@ bps-operator watches for `BestPracticeScanner` custom resources and runs a confi
 **Prerequisites**: A running Kubernetes or OpenShift cluster with `kubectl`/`oc` configured.
 
 ```bash
+git clone https://github.com/sebrandon1/bps-operator.git && cd bps-operator
+
 # One-shot scan — deploys operator in-cluster, runs all checks, shows results
 make deploy-scan
 
