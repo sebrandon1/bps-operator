@@ -1,0 +1,15 @@
+apiVersion: bps.openshift.io/v1alpha1
+kind: BestPracticeScanner
+metadata:
+  name: networking-scanner
+  namespace: default
+spec:
+  targetNamespace: default
+  checks:
+    - networking-dual-stack-service
+    - networking-icmpv4-connectivity
+    - networking-icmpv6-connectivity
+    - networking-network-policy-deny-all
+    - networking-ocp-reserved-ports-usage
+    - networking-reserved-partner-ports
+    - networking-undeclared-container-ports-usage
