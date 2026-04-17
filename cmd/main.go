@@ -28,7 +28,7 @@ import (
 	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 
 	checksall "github.com/redhat-best-practices-for-k8s/checks/all"
-	bpsv1alpha1 "github.com/sebrandon1/bps-operator/api/v1alpha1"
+	bpsv1alpha1 "github.com/redhat-best-practices-for-k8s/checks-types/api/v1alpha1"
 	"github.com/sebrandon1/bps-operator/internal/certification"
 	"github.com/sebrandon1/bps-operator/internal/controller"
 	"github.com/sebrandon1/bps-operator/internal/probe"
