@@ -19,7 +19,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	"github.com/redhat-best-practices-for-k8s/checks"
-	bpsv1alpha1 "github.com/sebrandon1/bps-operator/api/v1alpha1"
+	bpsv1alpha1 "github.com/redhat-best-practices-for-k8s/checks-types/api/v1alpha1"
 	bpsmetrics "github.com/sebrandon1/bps-operator/internal/metrics"
 	"github.com/sebrandon1/bps-operator/internal/probe"
 	"github.com/sebrandon1/bps-operator/internal/scanner"

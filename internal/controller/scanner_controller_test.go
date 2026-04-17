@@ -21,7 +21,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	checksall "github.com/redhat-best-practices-for-k8s/checks/all"
-	bpsv1alpha1 "github.com/sebrandon1/bps-operator/api/v1alpha1"
+	bpsv1alpha1 "github.com/redhat-best-practices-for-k8s/checks-types/api/v1alpha1"
 )
 
 func TestMain(m *testing.M) {
