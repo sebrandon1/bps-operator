@@ -33,7 +33,7 @@ jobs:
         run: go install sigs.k8s.io/controller-tools/cmd/controller-gen@latest
 
       - name: Create Kubernetes cluster
-        uses: palmsoftware/quick-k8s@378b23b1e3bdd8a40dd6bb6059d50886708ca687 # v0.0.60
+        uses: palmsoftware/quick-k8s@c0fcc361a883fb7154a0b8601e517c5817f9fc4d # v0.0.62
         with:
           numControlPlaneNodes: 1
           numWorkerNodes: 1
