@@ -557,3 +557,170 @@ func TestReconcile_SuspendAlreadyIdle(t *testing.T) {
 		t.Error("expected no requeue for suspended scanner")
 	}
 }
+
+func TestReconcile_ResultTTL(t *testing.T) {
+	s := newScheme()
+
+	scanner := &bpsv1alpha1.BestPracticeScanner{
+		ObjectMeta: metav1.ObjectMeta{Name: "scanner", Namespace: "ns"},
+		Spec: bpsv1alpha1.BestPracticeScannerSpec{
+			Checks: []string{"access-control-pod-host-network"},
+		},
+	}
+
+	oldTimestamp := metav1.NewTime(time.Now().Add(-48 * time.Hour))
+	expiredResult := &bpsv1alpha1.BestPracticeResult{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "scanner.old-expired",
+			Namespace: "ns",
+		},
+		Spec: bpsv1alpha1.BestPracticeResultSpec{
+			ScannerRef: "scanner",
+			CheckName:  "old-expired",
+			Timestamp:  oldTimestamp,
+		},
+	}
+
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{Name: "pod", Namespace: "ns"},
+		Spec:       corev1.PodSpec{Containers: []corev1.Container{{Name: "c1", Image: "img"}}},
+	}
+
+	c := fake.NewClientBuilder().WithScheme(s).
+		WithObjects(scanner, expiredResult, pod).
+		WithStatusSubresource(scanner).
+		WithIndex(&bpsv1alpha1.BestPracticeResult{}, "spec.scannerRef", func(obj client.Object) []string {
+			result := obj.(*bpsv1alpha1.BestPracticeResult)
+			return []string{result.Spec.ScannerRef}
+		}).
+		Build()
+
+	r := &ScannerReconciler{
+		Client:    c,
+		Scheme:    s,
+		Recorder:  record.NewFakeRecorder(10),
+		ResultTTL: 24 * time.Hour,
+	}
+	_, err := r.Reconcile(context.Background(), ctrl.Request{
+		NamespacedName: types.NamespacedName{Name: "scanner", Namespace: "ns"},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var resultList bpsv1alpha1.BestPracticeResultList
+	_ = c.List(context.Background(), &resultList, client.InNamespace("ns"))
+
+	for _, r := range resultList.Items {
+		if r.Name == "scanner.old-expired" {
+			t.Error("expired result should have been deleted by TTL cleanup")
+		}
+	}
+}
+
+func TestDeleteStaleResults_ZeroTimestampNotExpired(t *testing.T) {
+	s := newScheme()
+
+	scanner := &bpsv1alpha1.BestPracticeScanner{
+		ObjectMeta: metav1.ObjectMeta{Name: "scanner", Namespace: "ns"},
+	}
+
+	zeroTimestampResult := &bpsv1alpha1.BestPracticeResult{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "scanner.current-check",
+			Namespace: "ns",
+		},
+		Spec: bpsv1alpha1.BestPracticeResultSpec{
+			ScannerRef: "scanner",
+			CheckName:  "current-check",
+		},
+	}
+
+	c := fake.NewClientBuilder().WithScheme(s).
+		WithObjects(scanner, zeroTimestampResult).
+		WithIndex(&bpsv1alpha1.BestPracticeResult{}, "spec.scannerRef", func(obj client.Object) []string {
+			result := obj.(*bpsv1alpha1.BestPracticeResult)
+			return []string{result.Spec.ScannerRef}
+		}).
+		Build()
+
+	r := &ScannerReconciler{
+		Client:    c,
+		Scheme:    s,
+		ResultTTL: 1 * time.Hour,
+	}
+
+	currentNames := map[string]bool{"scanner.current-check": true}
+	if err := r.deleteStaleResults(context.Background(), scanner, currentNames); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var resultList bpsv1alpha1.BestPracticeResultList
+	_ = c.List(context.Background(), &resultList, client.InNamespace("ns"))
+	if len(resultList.Items) != 1 {
+		t.Errorf("expected 1 result to survive, got %d", len(resultList.Items))
+	}
+}
+
+func TestReconcile_ResultTTL_ZeroDisablesCleanup(t *testing.T) {
+	s := newScheme()
+
+	scanner := &bpsv1alpha1.BestPracticeScanner{
+		ObjectMeta: metav1.ObjectMeta{Name: "scanner", Namespace: "ns"},
+		Spec: bpsv1alpha1.BestPracticeScannerSpec{
+			Checks: []string{"access-control-pod-host-network"},
+		},
+	}
+
+	oldTimestamp := metav1.NewTime(time.Now().Add(-48 * time.Hour))
+	oldResult := &bpsv1alpha1.BestPracticeResult{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "scanner.old-check",
+			Namespace: "ns",
+		},
+		Spec: bpsv1alpha1.BestPracticeResultSpec{
+			ScannerRef: "scanner",
+			CheckName:  "access-control-pod-host-network",
+			Timestamp:  oldTimestamp,
+		},
+	}
+
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{Name: "pod", Namespace: "ns"},
+		Spec:       corev1.PodSpec{Containers: []corev1.Container{{Name: "c1", Image: "img"}}},
+	}
+
+	c := fake.NewClientBuilder().WithScheme(s).
+		WithObjects(scanner, oldResult, pod).
+		WithStatusSubresource(scanner).
+		WithIndex(&bpsv1alpha1.BestPracticeResult{}, "spec.scannerRef", func(obj client.Object) []string {
+			result := obj.(*bpsv1alpha1.BestPracticeResult)
+			return []string{result.Spec.ScannerRef}
+		}).
+		Build()
+
+	r := &ScannerReconciler{
+		Client:    c,
+		Scheme:    s,
+		Recorder:  record.NewFakeRecorder(10),
+		ResultTTL: 0,
+	}
+	_, err := r.Reconcile(context.Background(), ctrl.Request{
+		NamespacedName: types.NamespacedName{Name: "scanner", Namespace: "ns"},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var resultList bpsv1alpha1.BestPracticeResultList
+	_ = c.List(context.Background(), &resultList, client.InNamespace("ns"))
+	found := false
+	for _, r := range resultList.Items {
+		if r.Spec.CheckName == "access-control-pod-host-network" {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("result should still exist when TTL is 0 (disabled)")
+	}
+}

@@ -63,6 +63,7 @@ type options struct {
 	certAPIURL        string
 	nodeName          string
 	catalogURLBase    string
+	resultTTL         time.Duration
 }
 
 // parseFlags parses command-line flags from the given FlagSet and arguments.
@@ -77,6 +78,7 @@ func parseFlags(fs *flag.FlagSet, args []string) (options, error) {
 	fs.StringVar(&opts.certAPIURL, "certification-api-url", "", "Red Hat Pyxis API base URL for certification checks (default: Red Hat Catalog API).")
 	fs.StringVar(&opts.nodeName, "node-name", "", "Node name where the scanner pod runs.")
 	fs.StringVar(&opts.catalogURLBase, "catalog-url-base", "https://github.com/redhat-best-practices-for-k8s/certsuite/blob/main/CATALOG.md", "Base URL for check catalog documentation.")
+	fs.DurationVar(&opts.resultTTL, "result-ttl", 0, "Auto-delete scan results older than this duration (e.g., 24h, 168h). 0 disables cleanup.")
 
 	if err := fs.Parse(args); err != nil {
 		return options{}, fmt.Errorf("parsing flags: %w", err)
@@ -144,6 +146,7 @@ func run(opts options, cfg *rest.Config) error {
 		K8sClientset:      k8sClientset,
 		ScaleClient:       scaleClient,
 		CatalogURLBase:    opts.catalogURLBase,
+		ResultTTL:         opts.resultTTL,
 	}).SetupWithManager(mgr); err != nil {
 		return fmt.Errorf("creating controller: %w", err)
 	}
