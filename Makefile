@@ -1,4 +1,5 @@
-IMG ?= quay.io/bapalm/bps-operator:latest
+VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
+IMG ?= quay.io/bapalm/bps-operator:$(VERSION)
 OPERATOR_NAMESPACE ?= bps-operator-system
 TEST_NAMESPACE ?= bps-test
 KIND_CLUSTER_NAME ?= kind
@@ -257,6 +258,19 @@ show-periodic-scan-yaml: ## Print the periodic scanner CR YAML
 clean: undeploy-test uninstall ## Remove everything: test workloads, CRDs, namespace
 	$(KUBECTL) delete namespace $(TEST_NAMESPACE) --ignore-not-found
 	@echo "Cleaned up."
+
+##@ Release
+
+.PHONY: release-tag
+release-tag: ## Create and push a release tag (usage: make release-tag VERSION=v0.0.4)
+	@if [ "$(VERSION)" = "$$(git describe --tags --always --dirty 2>/dev/null || echo dev)" ]; then \
+		echo "Error: specify VERSION (e.g., make release-tag VERSION=v0.0.4)"; exit 1; \
+	fi
+	@if ! echo "$(VERSION)" | grep -qE '^v[0-9]+\.[0-9]+\.[0-9]+$$'; then \
+		echo "Error: VERSION must match vX.Y.Z (got: $(VERSION))"; exit 1; \
+	fi
+	git tag -a "$(VERSION)" -m "Release $(VERSION)"
+	git push origin "$(VERSION)"
 
 ##@ Coverage
 
