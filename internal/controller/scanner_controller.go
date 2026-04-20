@@ -39,6 +39,7 @@ type ScannerReconciler struct {
 	K8sClientset      any // kubernetes.Interface
 	ScaleClient       any // scale.ScalesGetter
 	CatalogURLBase    string
+	ResultTTL         time.Duration
 }
 
 const probeRequeueInterval = 5 * time.Second
@@ -414,9 +415,12 @@ func (r *ScannerReconciler) deleteStaleResults(ctx context.Context, scannerCR *b
 		return err
 	}
 
+	cutoff := time.Now().Add(-r.ResultTTL)
 	for i := range resultList.Items {
 		result := &resultList.Items[i]
-		if !currentNames[result.Name] {
+		stale := !currentNames[result.Name]
+		expired := r.ResultTTL > 0 && !result.Spec.Timestamp.Time.IsZero() && result.Spec.Timestamp.Time.Before(cutoff)
+		if stale || expired {
 			if err := r.Delete(ctx, result); err != nil && !apierrors.IsNotFound(err) {
 				return err
 			}
