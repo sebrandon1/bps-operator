@@ -14,12 +14,16 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
-func TestEnsureDaemonSet_Create(t *testing.T) {
-	scheme := runtime.NewScheme()
-	_ = appsv1.AddToScheme(scheme)
-	_ = corev1.AddToScheme(scheme)
+func newScheme() *runtime.Scheme {
+	s := runtime.NewScheme()
+	_ = appsv1.AddToScheme(s)
+	_ = corev1.AddToScheme(s)
 
-	client := fake.NewClientBuilder().WithScheme(scheme).Build()
+	return s
+}
+
+func TestEnsureDaemonSet_Create(t *testing.T) {
+	client := fake.NewClientBuilder().WithScheme(newScheme()).Build()
 
 	err := EnsureDaemonSet(context.Background(), client, "test-ns", ProbeImage)
 	if err != nil {
@@ -41,11 +45,7 @@ func TestEnsureDaemonSet_Create(t *testing.T) {
 }
 
 func TestEnsureDaemonSet_CustomImage(t *testing.T) {
-	scheme := runtime.NewScheme()
-	_ = appsv1.AddToScheme(scheme)
-	_ = corev1.AddToScheme(scheme)
-
-	client := fake.NewClientBuilder().WithScheme(scheme).Build()
+	client := fake.NewClientBuilder().WithScheme(newScheme()).Build()
 
 	customImage := "my-registry.io/custom-probe:v1.0.0"
 	err := EnsureDaemonSet(context.Background(), client, "test-ns", customImage)
@@ -65,11 +65,7 @@ func TestEnsureDaemonSet_CustomImage(t *testing.T) {
 }
 
 func TestEnsureDaemonSet_EmptyImageUsesDefault(t *testing.T) {
-	scheme := runtime.NewScheme()
-	_ = appsv1.AddToScheme(scheme)
-	_ = corev1.AddToScheme(scheme)
-
-	client := fake.NewClientBuilder().WithScheme(scheme).Build()
+	client := fake.NewClientBuilder().WithScheme(newScheme()).Build()
 
 	err := EnsureDaemonSet(context.Background(), client, "test-ns", "")
 	if err != nil {
@@ -88,11 +84,7 @@ func TestEnsureDaemonSet_EmptyImageUsesDefault(t *testing.T) {
 }
 
 func TestEnsureDaemonSet_NoUpdateWhenUnchanged(t *testing.T) {
-	scheme := runtime.NewScheme()
-	_ = appsv1.AddToScheme(scheme)
-	_ = corev1.AddToScheme(scheme)
-
-	client := fake.NewClientBuilder().WithScheme(scheme).Build()
+	client := fake.NewClientBuilder().WithScheme(newScheme()).Build()
 
 	// Create initial DaemonSet
 	err := EnsureDaemonSet(context.Background(), client, "test-ns", ProbeImage)
@@ -127,9 +119,6 @@ func TestEnsureDaemonSet_NoUpdateWhenUnchanged(t *testing.T) {
 }
 
 func TestMapProbePods(t *testing.T) {
-	scheme := runtime.NewScheme()
-	_ = corev1.AddToScheme(scheme)
-
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "probe-node1",
@@ -140,7 +129,7 @@ func TestMapProbePods(t *testing.T) {
 		Status: corev1.PodStatus{Phase: corev1.PodRunning},
 	}
 
-	client := fake.NewClientBuilder().WithScheme(scheme).WithObjects(pod).Build()
+	client := fake.NewClientBuilder().WithScheme(newScheme()).WithObjects(pod).Build()
 
 	probeMap, err := MapProbePods(context.Background(), client, "test-ns")
 	if err != nil {
@@ -151,6 +140,117 @@ func TestMapProbePods(t *testing.T) {
 	}
 	if probeMap["node1"] == nil {
 		t.Error("expected probe pod for node1")
+	}
+}
+
+func TestDeleteDaemonSet(t *testing.T) {
+	client := fake.NewClientBuilder().WithScheme(newScheme()).Build()
+
+	// Create DaemonSet first
+	err := EnsureDaemonSet(context.Background(), client, "test-ns", ProbeImage)
+	if err != nil {
+		t.Fatalf("unexpected error creating DaemonSet: %v", err)
+	}
+
+	// Delete it
+	err = DeleteDaemonSet(context.Background(), client, "test-ns")
+	if err != nil {
+		t.Fatalf("unexpected error deleting DaemonSet: %v", err)
+	}
+
+	// Verify it's gone
+	var ds appsv1.DaemonSet
+	err = client.Get(context.Background(), types.NamespacedName{Name: ProbeName, Namespace: "test-ns"}, &ds)
+	if err == nil {
+		t.Error("expected DaemonSet to be deleted")
+	}
+}
+
+func TestDeleteDaemonSet_NotFound(t *testing.T) {
+	client := fake.NewClientBuilder().WithScheme(newScheme()).Build()
+
+	// Deleting non-existent DaemonSet should succeed (not found is not an error)
+	err := DeleteDaemonSet(context.Background(), client, "test-ns")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestEnsureDaemonSet_UpdateWhenChanged(t *testing.T) {
+	client := fake.NewClientBuilder().WithScheme(newScheme()).Build()
+
+	// Create with default image
+	err := EnsureDaemonSet(context.Background(), client, "test-ns", ProbeImage)
+	if err != nil {
+		t.Fatalf("unexpected error on create: %v", err)
+	}
+
+	var ds appsv1.DaemonSet
+	_ = client.Get(context.Background(), types.NamespacedName{Name: ProbeName, Namespace: "test-ns"}, &ds)
+	initialRV := ds.ResourceVersion
+
+	// Update with different image
+	err = EnsureDaemonSet(context.Background(), client, "test-ns", "new-image:v2")
+	if err != nil {
+		t.Fatalf("unexpected error on update: %v", err)
+	}
+
+	_ = client.Get(context.Background(), types.NamespacedName{Name: ProbeName, Namespace: "test-ns"}, &ds)
+	if ds.ResourceVersion == initialRV {
+		t.Error("expected ResourceVersion to change after image update")
+	}
+	if ds.Spec.Template.Spec.Containers[0].Image != "new-image:v2" {
+		t.Errorf("expected new-image:v2, got %s", ds.Spec.Template.Spec.Containers[0].Image)
+	}
+}
+
+func TestMapProbePods_SkipsNonRunning(t *testing.T) {
+	runningPod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "probe-node1",
+			Namespace: "test-ns",
+			Labels:    map[string]string{ProbeLabel: ProbeLabelVal},
+		},
+		Spec:   corev1.PodSpec{NodeName: "node1"},
+		Status: corev1.PodStatus{Phase: corev1.PodRunning},
+	}
+
+	pendingPod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "probe-node2",
+			Namespace: "test-ns",
+			Labels:    map[string]string{ProbeLabel: ProbeLabelVal},
+		},
+		Spec:   corev1.PodSpec{NodeName: "node2"},
+		Status: corev1.PodStatus{Phase: corev1.PodPending},
+	}
+
+	client := fake.NewClientBuilder().WithScheme(newScheme()).WithObjects(runningPod, pendingPod).Build()
+
+	probeMap, err := MapProbePods(context.Background(), client, "test-ns")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(probeMap) != 1 {
+		t.Fatalf("expected 1 running probe pod, got %d", len(probeMap))
+	}
+	if probeMap["node1"] == nil {
+		t.Error("expected running probe pod for node1")
+	}
+	if probeMap["node2"] != nil {
+		t.Error("expected no probe pod for node2 (pending)")
+	}
+}
+
+func TestMapProbePods_Empty(t *testing.T) {
+	client := fake.NewClientBuilder().WithScheme(newScheme()).Build()
+
+	probeMap, err := MapProbePods(context.Background(), client, "test-ns")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(probeMap) != 0 {
+		t.Fatalf("expected 0 probe pods, got %d", len(probeMap))
 	}
 }
 
