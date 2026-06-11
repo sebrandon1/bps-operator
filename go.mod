@@ -1,13 +1,13 @@
 module github.com/sebrandon1/bps-operator
 
-go 1.26.1
+go 1.26.3
 
 toolchain go1.26.4
 
 require (
 	github.com/k8snetworkplumbingwg/network-attachment-definition-client v1.7.7
 	github.com/openshift/api v0.0.0-20260204104751-e09e5a4ebcd0
-	github.com/operator-framework/api v0.42.0
+	github.com/operator-framework/api v0.44.0
 	github.com/operator-framework/operator-lifecycle-manager v0.43.0
 	github.com/prometheus/client_golang v1.23.2
 	github.com/redhat-best-practices-for-k8s/checks v0.0.25
@@ -46,7 +46,7 @@ require (
 	github.com/go-openapi/swag/stringutils v0.25.4 // indirect
 	github.com/go-openapi/swag/typeutils v0.25.4 // indirect
 	github.com/go-openapi/swag/yamlutils v0.25.4 // indirect
-	github.com/google/cel-go v0.27.0 // indirect
+	github.com/google/cel-go v0.28.1 // indirect
 	github.com/google/gnostic-models v0.7.1 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/gorilla/websocket v1.5.4-0.20250319132907-e064f32e3674 // indirect
