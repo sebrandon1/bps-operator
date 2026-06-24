@@ -1,4 +1,4 @@
-name: E2E OCP 4.21 Tests
+name: E2E OCP 4.20 Tests
 
 on:
   push:
@@ -6,7 +6,7 @@ on:
   pull_request:
     branches: [main]
   schedule:
-    - cron: "0 4 * * *" # Nightly at 04:00 UTC
+    - cron: "0 6 * * *" # Nightly at 06:00 UTC
 
 # Only run on upstream (sebrandon1) repo and non-dependabot PRs — skip contexts that lack required secrets
 
@@ -53,7 +53,7 @@ jobs:
         with:
           ocpPullSecret: $OCP_PULL_SECRET
           bundleCache: true
-          desiredOCPVersion: 4.21
+          desiredOCPVersion: 4.20
           waitForOperatorsReady: true
         env:
           OCP_PULL_SECRET: ${{ secrets.CRC_PULL_SECRET }}
