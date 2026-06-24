@@ -1,4 +1,4 @@
-name: E2E OCP 4.22 Tests
+name: E2E OCP 4.20 Tests
 
 on:
   push:
@@ -53,7 +53,7 @@ jobs:
         with:
           ocpPullSecret: $OCP_PULL_SECRET
           bundleCache: true
-          desiredOCPVersion: 4.22
+          desiredOCPVersion: 4.20
           waitForOperatorsReady: true
         env:
           OCP_PULL_SECRET: ${{ secrets.CRC_PULL_SECRET }}
