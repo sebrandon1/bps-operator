@@ -94,13 +94,30 @@ jobs:
           make manifests
           oc apply -f config/crd/bases/
           oc apply -f config/rbac/
+
+          # Inject the correct image before applying to avoid a double rollout.
+          # Applying with the default quay.io image then immediately patching
+          # triggers two competing rollouts that race on CRC's limited resources.
+          sed -i "s|quay.io/bapalm/bps-operator:latest|$INTERNAL_IMG|g" config/manager/manager.yaml
           oc apply -f config/manager/
-          oc set image deployment/bps-operator-controller-manager manager=$INTERNAL_IMG -n bps-operator-system
-          oc patch deployment bps-operator-controller-manager -n bps-operator-system \
-            -p '{"spec":{"template":{"spec":{"containers":[{"name":"manager","imagePullPolicy":"Always"}]}}}}'
 
       - name: Wait for operator to be ready
-        run: oc rollout status deployment/bps-operator-controller-manager -n bps-operator-system --timeout=120s
+        run: oc rollout status deployment/bps-operator-controller-manager -n bps-operator-system --timeout=300s
+
+      - name: Debug operator failure
+        if: failure()
+        run: |
+          echo "=== Pod Status ==="
+          oc get pods -n bps-operator-system -o wide
+          echo ""
+          echo "=== Pod Describe ==="
+          oc describe pods -n bps-operator-system
+          echo ""
+          echo "=== Events ==="
+          oc get events -n bps-operator-system --sort-by='.lastTimestamp'
+          echo ""
+          echo "=== Operator Logs ==="
+          oc logs deployment/bps-operator-controller-manager -n bps-operator-system --tail=100 2>/dev/null || true
 
       - name: Deploy test workloads and scanner
         run: |
