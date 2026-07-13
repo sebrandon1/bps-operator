@@ -2,7 +2,7 @@ module github.com/sebrandon1/bps-operator
 
 go 1.26.3
 
-toolchain go1.26.4
+toolchain go1.26.5
 
 require (
 	github.com/k8snetworkplumbingwg/network-attachment-definition-client v1.7.7
