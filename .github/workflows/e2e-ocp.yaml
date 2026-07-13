@@ -1,4 +1,4 @@
-name: E2E OCP 4.21 Tests
+name: E2E
 
 on:
   push:
@@ -8,12 +8,6 @@ on:
   schedule:
     - cron: "0 4 * * *" # Nightly at 04:00 UTC
 
-# Only run on upstream (sebrandon1) repo and non-dependabot PRs — skip contexts that lack required secrets
-
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
-
 permissions: read-all
 
 jobs:
@@ -21,6 +15,14 @@ jobs:
     if: github.repository == 'sebrandon1/bps-operator' && github.actor != 'dependabot[bot]'
     runs-on: ubuntu-24.04
     timeout-minutes: 120
+    concurrency:
+      group: ${{ github.workflow }}-${{ github.ref }}-${{ matrix.ocp-version }}
+      cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        ocp-version: ["4.20", "4.21", "4.22"]
+    name: OCP ${{ matrix.ocp-version }}
     env:
       KUBECONFIG: '/home/runner/.crc/machines/crc/kubeconfig'
     steps:
@@ -53,7 +55,7 @@ jobs:
         with:
           ocpPullSecret: $OCP_PULL_SECRET
           bundleCache: true
-          desiredOCPVersion: 4.21
+          desiredOCPVersion: ${{ matrix.ocp-version }}
           waitForOperatorsReady: true
         env:
           OCP_PULL_SECRET: ${{ secrets.CRC_PULL_SECRET }}
@@ -69,10 +71,14 @@ jobs:
 
           # Expose the internal registry via default route
           oc patch configs.imageregistry.operator.openshift.io/cluster --type merge -p '{"spec":{"defaultRoute":true}}'
-          sleep 10
 
-          # Get the registry route
-          REGISTRY=$(oc get route default-route -n openshift-image-registry -o jsonpath='{.spec.host}')
+          # Wait for registry route to be admitted instead of a blind sleep
+          for i in $(seq 1 30); do
+            REGISTRY=$(oc get route default-route -n openshift-image-registry -o jsonpath='{.spec.host}' 2>/dev/null)
+            if [ -n "$REGISTRY" ]; then break; fi
+            echo "Waiting for registry route... ($i/30)"
+            sleep 2
+          done
           echo "Registry: $REGISTRY"
 
           # Login to the internal registry with the token
@@ -86,6 +92,10 @@ jobs:
           docker tag bps-operator:e2e "$REMOTE_IMG"
           docker push "$REMOTE_IMG"
 
+          # Verify the image landed in the internal registry
+          oc get imagestream bps-operator -n bps-operator-system -o jsonpath='{.status.tags[0].tag}' | grep -q e2e
+          echo "Image push verified in internal registry"
+
           # Save the internal image reference for later steps
           echo "INTERNAL_IMG=image-registry.openshift-image-registry.svc:5000/bps-operator-system/bps-operator:e2e" >> "$GITHUB_ENV"
 
@@ -93,11 +103,11 @@ jobs:
         run: |
           make manifests
           oc apply -f config/crd/bases/
+          oc wait --for=condition=Established crd/bestpracticescanners.bps.openshift.io --timeout=30s
+          oc wait --for=condition=Established crd/bestpracticeresults.bps.openshift.io --timeout=30s
           oc apply -f config/rbac/
 
-          # Inject the correct image before applying to avoid a double rollout.
-          # Applying with the default quay.io image then immediately patching
-          # triggers two competing rollouts that race on CRC's limited resources.
+          # Inject the correct image before applying to avoid a double rollout
           sed -i "s|quay.io/bapalm/bps-operator:latest|$INTERNAL_IMG|g" config/manager/manager.yaml
           oc apply -f config/manager/
 
