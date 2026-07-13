@@ -1,4 +1,4 @@
-name: E2E checks-qe OCP Tests
+name: checks-qe
 
 on:
   push:
@@ -8,10 +8,6 @@ on:
   schedule:
     - cron: "0 4 * * *"
 
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
-
 permissions: read-all
 
 jobs:
@@ -19,6 +15,14 @@ jobs:
     if: github.repository == 'sebrandon1/bps-operator' && github.actor != 'dependabot[bot]'
     runs-on: ubuntu-24.04
     timeout-minutes: 120
+    concurrency:
+      group: ${{ github.workflow }}-${{ github.ref }}-${{ matrix.ocp-version }}
+      cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        ocp-version: ["4.20", "4.21", "4.22"]
+    name: OCP ${{ matrix.ocp-version }}
     env:
       KUBECONFIG: '/home/runner/.crc/machines/crc/kubeconfig'
       CHECKS_QE_IMAGE: quay.io/redhat-best-practices-for-k8s/checks-qe:unstable
@@ -52,7 +56,7 @@ jobs:
         with:
           ocpPullSecret: $OCP_PULL_SECRET
           bundleCache: true
-          desiredOCPVersion: 4.21
+          desiredOCPVersion: ${{ matrix.ocp-version }}
           waitForOperatorsReady: true
         env:
           OCP_PULL_SECRET: ${{ secrets.CRC_PULL_SECRET }}
@@ -60,30 +64,63 @@ jobs:
       - name: Push image to OpenShift internal registry
         run: |
           docker load -i ${GITHUB_WORKSPACE}/bps-operator.tar
+
           KUBEADMIN_PASS=$(cat ~/.crc/machines/crc/kubeadmin-password)
           oc login -u kubeadmin -p "$KUBEADMIN_PASS" https://api.crc.testing:6443 --insecure-skip-tls-verify
+
           oc patch configs.imageregistry.operator.openshift.io/cluster --type merge -p '{"spec":{"defaultRoute":true}}'
-          sleep 10
-          REGISTRY=$(oc get route default-route -n openshift-image-registry -o jsonpath='{.spec.host}')
+
+          # Wait for registry route to be admitted instead of a blind sleep
+          for i in $(seq 1 30); do
+            REGISTRY=$(oc get route default-route -n openshift-image-registry -o jsonpath='{.spec.host}' 2>/dev/null)
+            if [ -n "$REGISTRY" ]; then break; fi
+            echo "Waiting for registry route... ($i/30)"
+            sleep 2
+          done
+          echo "Registry: $REGISTRY"
+
           docker login -u kubeadmin -p "$(oc whoami -t)" "$REGISTRY"
           oc new-project bps-operator-system 2>/dev/null || true
+
           REMOTE_IMG="$REGISTRY/bps-operator-system/bps-operator:e2e"
           docker tag bps-operator:e2e "$REMOTE_IMG"
           docker push "$REMOTE_IMG"
+
+          # Verify the image landed in the internal registry
+          oc get imagestream bps-operator -n bps-operator-system -o jsonpath='{.status.tags[0].tag}' | grep -q e2e
+          echo "Image push verified in internal registry"
+
           echo "INTERNAL_IMG=image-registry.openshift-image-registry.svc:5000/bps-operator-system/bps-operator:e2e" >> "$GITHUB_ENV"
 
       - name: Deploy operator
         run: |
           make manifests
           oc apply -f config/crd/bases/
+          oc wait --for=condition=Established crd/bestpracticescanners.bps.openshift.io --timeout=30s
+          oc wait --for=condition=Established crd/bestpracticeresults.bps.openshift.io --timeout=30s
           oc apply -f config/rbac/
+
+          # Inject the correct image before applying to avoid a double rollout
+          sed -i "s|quay.io/bapalm/bps-operator:latest|$INTERNAL_IMG|g" config/manager/manager.yaml
           oc apply -f config/manager/
-          oc set image deployment/bps-operator-controller-manager manager=$INTERNAL_IMG -n bps-operator-system
-          oc patch deployment bps-operator-controller-manager -n bps-operator-system \
-            -p '{"spec":{"template":{"spec":{"containers":[{"name":"manager","imagePullPolicy":"Always"}]}}}}'
 
       - name: Wait for operator to be ready
-        run: oc rollout status deployment/bps-operator-controller-manager -n bps-operator-system --timeout=120s
+        run: oc rollout status deployment/bps-operator-controller-manager -n bps-operator-system --timeout=300s
+
+      - name: Debug operator failure
+        if: failure()
+        run: |
+          echo "=== Pod Status ==="
+          oc get pods -n bps-operator-system -o wide
+          echo ""
+          echo "=== Pod Describe ==="
+          oc describe pods -n bps-operator-system
+          echo ""
+          echo "=== Events ==="
+          oc get events -n bps-operator-system --sort-by='.lastTimestamp'
+          echo ""
+          echo "=== Operator Logs ==="
+          oc logs deployment/bps-operator-controller-manager -n bps-operator-system --tail=100 2>/dev/null || true
 
       - name: Run checks-qe in operator mode
         run: |

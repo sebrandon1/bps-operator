@@ -1,4 +1,4 @@
-name: E2E Tests
+name: E2E
 
 on:
   push:
@@ -16,6 +16,7 @@ permissions: read-all
 
 jobs:
   e2e:
+    name: Kind
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout code
