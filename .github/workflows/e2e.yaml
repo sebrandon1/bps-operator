@@ -23,7 +23,7 @@ jobs:
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
       - name: Setup Go
-        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
 
@@ -31,7 +31,7 @@ jobs:
         run: go install sigs.k8s.io/controller-tools/cmd/controller-gen@latest
 
       - name: Create Kubernetes cluster
-        uses: palmsoftware/quick-k8s@5345f72c8712ccaf49a81ba4d1c9cf1d1d746864 # v0.0.74
+        uses: palmsoftware/quick-k8s@47ce89e8646bc9dc5bfc5513e1f1f3d5672288f0 # v0.0.75
         with:
           numControlPlaneNodes: 1
           numWorkerNodes: 1
