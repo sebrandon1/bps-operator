@@ -52,6 +52,7 @@ jobs:
           docker save bps-operator:e2e -o ${GITHUB_WORKSPACE}/bps-operator.tar
 
       - name: Deploy OCP cluster
+        id: deploy-cluster
         uses: palmsoftware/quick-ocp@750f1c774eac0d563504fa63f3c70571bacb54b4 # v0.0.37
         with:
           ocpPullSecret: $OCP_PULL_SECRET
@@ -108,7 +109,7 @@ jobs:
         run: oc rollout status deployment/bps-operator-controller-manager -n bps-operator-system --timeout=300s
 
       - name: Debug operator failure
-        if: failure()
+        if: failure() && steps.deploy-cluster.outcome == 'success'
         run: |
           echo "=== Pod Status ==="
           oc get pods -n bps-operator-system -o wide
