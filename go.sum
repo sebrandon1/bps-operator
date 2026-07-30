@@ -259,8 +259,8 @@ github.com/prometheus/otlptranslator v1.0.0 h1:s0LJW/iN9dkIH+EnhiD3BlkkP5QVIUVEo
 github.com/prometheus/otlptranslator v1.0.0/go.mod h1:vRYWnXvI6aWGpsdY/mOT/cbeVRBlPWtBNDb7kGR3uKM=
 github.com/prometheus/procfs v0.21.1 h1:GljZCt+zSTS+NZq88cyQ1LjZ+RCHp3uVuabBWA5+OJI=
 github.com/prometheus/procfs v0.21.1/go.mod h1:aB55Cww9pdSJVHk0hUf0inxWyyjPogFIjmHKYgMKmtY=
-github.com/redhat-best-practices-for-k8s/checks v0.0.26 h1:upBFxI2aQoF7Hg7MnVZ6vXIhbiQ2BE/T5ZAM6yS56Gw=
-github.com/redhat-best-practices-for-k8s/checks v0.0.26/go.mod h1:bA9bnav5y+/fHuLy3ZEuD/M6C5Hqgkyo0mjxvgySqWw=
+github.com/redhat-best-practices-for-k8s/checks v0.0.27 h1:ITMWs5gJhM46ETHdDfEYEiR/z5VLZGYJfi+07c2RY7Q=
+github.com/redhat-best-practices-for-k8s/checks v0.0.27/go.mod h1:S/XjLZcSeV6zPiekw31w7gxDwGRA9SqAxZJcwi2UejE=
 github.com/redhat-best-practices-for-k8s/checks-types v1.0.1 h1:TjXQr93FZ0TcEegwKOIlnWlGHCPVj8WT7temXg4wz00=
 github.com/redhat-best-practices-for-k8s/checks-types v1.0.1/go.mod h1:fYrm8suVrXD7FQWtnTXx/4BZ5CHhH87eCNAELVVWLUE=
 github.com/redis/go-redis/extra/rediscmd/v9 v9.17.3 h1:v9RNP5ynWkruvzscrIoDyyv20c9YeyVn12L9nYnaexw=
