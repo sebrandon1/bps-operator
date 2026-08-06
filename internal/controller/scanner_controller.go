@@ -12,6 +12,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/discovery"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/scale"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -36,8 +38,8 @@ type ScannerReconciler struct {
 	ScannerNodeName   string
 	CertValidator     checks.CertificationValidator
 	DiscoveryClient   discovery.ServerVersionInterface
-	K8sClientset      any // kubernetes.Interface
-	ScaleClient       any // scale.ScalesGetter
+	K8sClientset      kubernetes.Interface
+	ScaleClient       scale.ScalesGetter
 	CatalogURLBase    string
 	ResultTTL         time.Duration
 }
