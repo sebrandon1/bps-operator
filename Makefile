@@ -13,7 +13,7 @@ build:
 
 .PHONY: test
 test:
-	go test ./... -coverprofile cover.out
+	go test -race ./... -coverprofile cover.out
 
 .PHONY: lint
 lint:
