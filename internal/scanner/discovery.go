@@ -330,13 +330,9 @@ func parseHelmRelease(secret *corev1.Secret) (checks.HelmChartRelease, bool) {
 	}
 	defer func() { _ = reader.Close() }()
 
-	decoded, err := io.ReadAll(reader)
-	if err != nil {
-		return checks.HelmChartRelease{}, false
-	}
-
+	const maxHelmReleaseSize = 10 << 20 // 10 MiB
 	var rel helmReleaseData
-	if err := json.Unmarshal(decoded, &rel); err != nil {
+	if err := json.NewDecoder(io.LimitReader(reader, maxHelmReleaseSize)).Decode(&rel); err != nil {
 		return checks.HelmChartRelease{}, false
 	}
 
