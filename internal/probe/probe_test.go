@@ -8,6 +8,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/rest"
@@ -80,6 +81,71 @@ func TestEnsureDaemonSet_EmptyImageUsesDefault(t *testing.T) {
 
 	if ds.Spec.Template.Spec.Containers[0].Image != ProbeImage {
 		t.Errorf("expected default image %s when empty string provided, got %s", ProbeImage, ds.Spec.Template.Spec.Containers[0].Image)
+	}
+}
+
+func TestEnsureDaemonSet_HasResourceLimits(t *testing.T) {
+	client := fake.NewClientBuilder().WithScheme(newScheme()).Build()
+
+	err := EnsureDaemonSet(context.Background(), client, "test-ns", ProbeImage)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var ds appsv1.DaemonSet
+	err = client.Get(context.Background(), types.NamespacedName{Name: ProbeName, Namespace: "test-ns"}, &ds)
+	if err != nil {
+		t.Fatalf("DaemonSet not found: %v", err)
+	}
+
+	container := ds.Spec.Template.Spec.Containers[0]
+	checks := []struct {
+		name     string
+		got      resource.Quantity
+		expected string
+	}{
+		{"CPU request", container.Resources.Requests[corev1.ResourceCPU], "10m"},
+		{"memory request", container.Resources.Requests[corev1.ResourceMemory], "64Mi"},
+		{"CPU limit", container.Resources.Limits[corev1.ResourceCPU], "100m"},
+		{"memory limit", container.Resources.Limits[corev1.ResourceMemory], "128Mi"},
+	}
+	for _, c := range checks {
+		expected := resource.MustParse(c.expected)
+		if !c.got.Equal(expected) {
+			t.Errorf("%s: expected %s, got %s", c.name, c.expected, c.got.String())
+		}
+	}
+}
+
+func TestDesiredDaemonSet_SecurityFields(t *testing.T) {
+	ds := desiredDaemonSet("test-ns", ProbeImage)
+	spec := ds.Spec.Template.Spec
+
+	if !spec.HostIPC {
+		t.Error("expected HostIPC to be true")
+	}
+	if !spec.HostPID {
+		t.Error("expected HostPID to be true")
+	}
+	if len(spec.Tolerations) != 2 {
+		t.Fatalf("expected 2 tolerations, got %d", len(spec.Tolerations))
+	}
+
+	container := spec.Containers[0]
+	if container.SecurityContext == nil || container.SecurityContext.Privileged == nil || !*container.SecurityContext.Privileged {
+		t.Error("expected container to be privileged")
+	}
+	if len(container.Command) != 2 || container.Command[0] != "sleep" || container.Command[1] != "infinity" {
+		t.Errorf("expected command [sleep infinity], got %v", container.Command)
+	}
+	if len(container.VolumeMounts) != 1 {
+		t.Fatalf("expected 1 volume mount, got %d", len(container.VolumeMounts))
+	}
+	if !container.VolumeMounts[0].ReadOnly {
+		t.Error("expected host mount to be read-only")
+	}
+	if container.VolumeMounts[0].MountPath != HostMountPath {
+		t.Errorf("expected mount path %s, got %s", HostMountPath, container.VolumeMounts[0].MountPath)
 	}
 }
 
