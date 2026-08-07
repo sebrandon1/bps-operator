@@ -163,6 +163,44 @@ func TestDiscover_HelmChartReleases(t *testing.T) {
 	}
 }
 
+func TestParseHelmRelease_RejectsOversizedPayload(t *testing.T) {
+	// Create a gzipped payload that decompresses to > 10 MiB
+	var buf bytes.Buffer
+	gz := gzip.NewWriter(&buf)
+	oversized := make([]byte, 11<<20) // 11 MiB of zeros
+	_, _ = gz.Write(oversized)
+	_ = gz.Close()
+
+	secret := &corev1.Secret{
+		Data: map[string][]byte{"release": buf.Bytes()},
+	}
+
+	_, ok := parseHelmRelease(secret)
+	if ok {
+		t.Error("expected parseHelmRelease to reject oversized payload")
+	}
+}
+
+func TestParseHelmRelease_MissingReleaseKey(t *testing.T) {
+	secret := &corev1.Secret{
+		Data: map[string][]byte{"other-key": []byte("data")},
+	}
+	_, ok := parseHelmRelease(secret)
+	if ok {
+		t.Error("expected parseHelmRelease to return false for missing release key")
+	}
+}
+
+func TestParseHelmRelease_InvalidGzip(t *testing.T) {
+	secret := &corev1.Secret{
+		Data: map[string][]byte{"release": []byte("not-valid-gzip")},
+	}
+	_, ok := parseHelmRelease(secret)
+	if ok {
+		t.Error("expected parseHelmRelease to return false for invalid gzip data")
+	}
+}
+
 func TestDiscover_GracefulSkipUnregisteredCRDs(t *testing.T) {
 	// Use a scheme that does NOT have OpenShift/OLM types registered.
 	// Discovery should succeed gracefully, just with empty results for those types.
