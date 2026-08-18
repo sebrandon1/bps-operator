@@ -50,18 +50,12 @@ make clean
 |---|---|
 | [CRD API Reference](docs/crd-api.md) | `BestPracticeScanner` and `BestPracticeResult` field specs |
 | [Configuration](docs/configuration.md) | Scanner CR examples and field reference |
-| [Checks](docs/checks.md) | Category breakdown of all 105 checks |
+| [Checks](docs/checks.md) | Check category summary (105 checks across 9 categories) |
 | [Architecture](docs/architecture.md) | Project layout, check library, certsuite alignment |
 | [Security Model](docs/security-model.md) | Probe DaemonSet privileges and security boundaries |
 | [Development](docs/development.md) | Full `make` target reference |
+| [Changelog](CHANGELOG.md) | Release history |
 
 ## Development
 
-```bash
-make build       # Build operator binary
-make test        # Unit tests with coverage
-make lint        # golangci-lint
-make manifests   # Regenerate CRD and RBAC manifests
-make deploy      # Deploy operator to the cluster
-make clean       # Remove everything
-```
+See [Development](docs/development.md) for build, test, lint, and deployment targets.
