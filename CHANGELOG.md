@@ -7,6 +7,58 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- Fixed stale documentation across README and `docs/` (apiVersion, check names, project layout, CRD fields, make targets)
+- Updated CHANGELOG through v0.0.17
+
+## [0.0.17] - 2026-07-13
+
+### Added
+- OCP 4.20 E2E test workflow (#113)
+- Parallel lint CI jobs (#115)
+
+### Changed
+- Simplified README by extracting content to `docs/` (#110)
+- Bumped checks library to v0.0.26 (#108)
+- Bumped checks-types to v1.0.1 (#107)
+- Upgraded Go toolchain to 1.26.5 to resolve govulncheck CVE GO-2026-5856 (#119)
+- Bumped k8s, OLM, Docker, and GitHub Actions dependencies (#109, #111, #112, #114, #116, #117, #118)
+
+## [0.0.16] - 2026-06-08
+
+### Changed
+- Upgraded Go to 1.26.3 with toolchain directive (#101)
+- Updated Go toolchain to 1.26.4 (#104)
+- Bumped Docker and GitHub Actions dependencies (#102, #103)
+
+## [0.0.15] - 2026-05-29
+
+### Changed
+- Bumped OLM to v0.43.0 (#99)
+- Bumped k8s dependencies to v0.36.1 (#96)
+- Bumped Docker and GitHub Actions dependencies (#95, #97, #98, #100)
+
+## [0.0.14] - 2026-05-08
+
+### Added
+- `CLAUDE.md` for AI-assisted development (#92)
+
+### Changed
+- Upgraded Go to 1.26.3 (#93)
+- Bumped k8s and GitHub Actions dependencies (#90, #94)
+
+## [0.0.13] - 2026-05-02
+
+### Changed
+- Bumped checks library to v0.0.25 (#91)
+- Bumped k8s dependencies to v0.36.0 (#90)
+- Bumped GitHub Actions dependencies (#89)
+
+## [0.0.12] - 2026-04-24
+
+### Changed
+- Bumped GitHub Actions dependencies (#87)
+
 ## [0.0.11] - 2026-04-20
 
 ### Added
@@ -115,7 +167,13 @@ Initial release.
 - Multi-arch container image (amd64/arm64)
 - E2E tests in CI
 
-[Unreleased]: https://github.com/sebrandon1/bps-operator/compare/v0.0.11...HEAD
+[Unreleased]: https://github.com/sebrandon1/bps-operator/compare/v0.0.17...HEAD
+[0.0.17]: https://github.com/sebrandon1/bps-operator/compare/v0.0.16...v0.0.17
+[0.0.16]: https://github.com/sebrandon1/bps-operator/compare/v0.0.15...v0.0.16
+[0.0.15]: https://github.com/sebrandon1/bps-operator/compare/v0.0.14...v0.0.15
+[0.0.14]: https://github.com/sebrandon1/bps-operator/compare/v0.0.13...v0.0.14
+[0.0.13]: https://github.com/sebrandon1/bps-operator/compare/v0.0.12...v0.0.13
+[0.0.12]: https://github.com/sebrandon1/bps-operator/compare/v0.0.11...v0.0.12
 [0.0.11]: https://github.com/sebrandon1/bps-operator/compare/v0.0.10...v0.0.11
 [0.0.10]: https://github.com/sebrandon1/bps-operator/compare/v0.0.9...v0.0.10
 [0.0.9]: https://github.com/sebrandon1/bps-operator/compare/v0.0.8...v0.0.9

@@ -4,18 +4,20 @@
 
 ```
 cmd/                     Main entrypoint
-api/v1alpha1/            CRD type definitions (BestPracticeScanner, BestPracticeResult)
 internal/
   controller/            Reconciler for BestPracticeScanner CRs
   scanner/               Orchestrates check execution and result creation
   certification/         Red Hat container certification validation
   probe/                 Probe DaemonSet for exec-based checks
+  metrics/               Prometheus metrics
 config/
   crd/bases/             Generated CRD manifests
   rbac/                  RBAC manifests
   manager/               Operator Deployment manifest
   samples/               Example CRs and test workloads
 ```
+
+CRD type definitions (`BestPracticeScanner`, `BestPracticeResult`) live in the external [checks-types](https://github.com/redhat-best-practices-for-k8s/checks-types) library. Both CRs use API group `bps.openshift.io/v1alpha1`.
 
 ## Check Library
 

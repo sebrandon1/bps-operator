@@ -1,9 +1,11 @@
 # Configuration
 
+All CRs use API group **`bps.openshift.io/v1alpha1`**.
+
 Create a `BestPracticeScanner` CR to configure scanning:
 
 ```yaml
-apiVersion: bps.redhat-best-practices-for-k8s.com/v1alpha1
+apiVersion: bps.openshift.io/v1alpha1
 kind: BestPracticeScanner
 metadata:
   name: my-scanner
@@ -15,10 +17,18 @@ spec:
       app: my-workload
   scanInterval: "10m"
   checks:
-    - access-control-sys-admin
-    - lifecycle-container-liveness
+    - access-control-sys-admin-capability-check
+    - lifecycle-liveness-probe
   suspend: false
 ```
+
+## Sample CRs
+
+| File | Purpose |
+|---|---|
+| `config/samples/scanner_sample.yaml` | Periodic scan of all pods in a namespace |
+| `config/samples/scanner_label_selector.yaml` | Scan only pods matching a label selector |
+| `config/samples/scanner_networking.yaml` | Run networking checks only |
 
 ## Field Reference
 
