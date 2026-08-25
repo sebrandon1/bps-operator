@@ -263,7 +263,9 @@ func (r *ScannerReconciler) runChecks(ctx context.Context, scannerCR *bpsv1alpha
 	resultNames := make(map[string]bool)
 
 	for _, check := range checksToRun {
+		checkStart := time.Now()
 		checkResult := check.Fn(resources)
+		bpsmetrics.CheckDuration.WithLabelValues(check.Name, check.Category).Observe(time.Since(checkStart).Seconds())
 
 		switch bpsv1alpha1.ComplianceStatus(checkResult.ComplianceStatus) {
 		case bpsv1alpha1.StatusCompliant:
