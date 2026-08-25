@@ -10,6 +10,11 @@ import (
 	"github.com/redhat-best-practices-for-k8s/checks"
 )
 
+const (
+	retryAttempts = 3
+	retryBaseDelay = 500 * time.Millisecond
+)
+
 const defaultBaseURL = "https://catalog.redhat.com/api/containers/v1"
 
 // PyxisValidator implements checks.CertificationValidator using the Red Hat Pyxis API.
@@ -39,22 +44,38 @@ type pyxisResponse struct {
 }
 
 func (v *PyxisValidator) queryPyxis(endpoint string) bool {
-	resp, err := v.httpClient.Get(endpoint)
-	if err != nil {
-		return false
-	}
-	defer func() { _ = resp.Body.Close() }()
+	delay := retryBaseDelay
+	for attempt := range retryAttempts {
+		resp, err := v.httpClient.Get(endpoint)
+		if err != nil {
+			if attempt < retryAttempts-1 {
+				time.Sleep(delay)
+				delay *= 2
+			}
+			continue
+		}
 
-	if resp.StatusCode != http.StatusOK {
-		return false
-	}
+		if resp.StatusCode == http.StatusOK {
+			var result pyxisResponse
+			decodeErr := json.NewDecoder(resp.Body).Decode(&result)
+			_ = resp.Body.Close()
+			if decodeErr != nil {
+				return false
+			}
+			return len(result.Data) > 0
+		}
 
-	var result pyxisResponse
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return false
+		_ = resp.Body.Close()
+		// Retry on server errors and rate limiting; fail fast on client errors.
+		if resp.StatusCode < 500 && resp.StatusCode != http.StatusTooManyRequests {
+			return false
+		}
+		if attempt < retryAttempts-1 {
+			time.Sleep(delay)
+			delay *= 2
+		}
 	}
-
-	return len(result.Data) > 0
+	return false
 }
 
 // IsContainerCertified checks if a container image is certified by digest.
