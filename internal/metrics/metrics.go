@@ -30,8 +30,17 @@ var (
 		},
 		[]string{"scanner", "namespace", "status"},
 	)
+
+	CheckDuration = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Name:    "bps_check_duration_seconds",
+			Help:    "Duration of individual best-practice checks in seconds.",
+			Buckets: prometheus.ExponentialBuckets(0.01, 2, 12), // 10ms, 20ms, ..., ~40s
+		},
+		[]string{"check", "category"},
+	)
 )
 
 func init() {
-	metrics.Registry.MustRegister(ScanDuration, ScanTotal, CheckResults)
+	metrics.Registry.MustRegister(ScanDuration, ScanTotal, CheckResults, CheckDuration)
 }
