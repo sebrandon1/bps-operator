@@ -32,6 +32,7 @@ import (
 	"github.com/sebrandon1/bps-operator/internal/certification"
 	"github.com/sebrandon1/bps-operator/internal/controller"
 	"github.com/sebrandon1/bps-operator/internal/probe"
+	"github.com/sebrandon1/bps-operator/internal/webhook"
 
 	// Register metrics
 	_ "github.com/sebrandon1/bps-operator/internal/metrics"
@@ -64,6 +65,7 @@ type options struct {
 	nodeName          string
 	catalogURLBase    string
 	resultTTL         time.Duration
+	enableWebhook     bool
 }
 
 // parseFlags parses command-line flags from the given FlagSet and arguments.
@@ -79,6 +81,7 @@ func parseFlags(fs *flag.FlagSet, args []string) (options, error) {
 	fs.StringVar(&opts.nodeName, "node-name", "", "Node name where the scanner pod runs.")
 	fs.StringVar(&opts.catalogURLBase, "catalog-url-base", "https://github.com/redhat-best-practices-for-k8s/certsuite/blob/main/CATALOG.md", "Base URL for check catalog documentation.")
 	fs.DurationVar(&opts.resultTTL, "result-ttl", 0, "Auto-delete scan results older than this duration (e.g., 24h, 168h). 0 disables cleanup.")
+	fs.BoolVar(&opts.enableWebhook, "enable-webhook", false, "Enable the validating webhook for BestPracticeScanner (requires TLS certificates from cert-manager or similar).")
 
 	if err := fs.Parse(args); err != nil {
 		return options{}, fmt.Errorf("parsing flags: %w", err)
@@ -149,6 +152,12 @@ func run(opts options, cfg *rest.Config) error {
 		ResultTTL:         opts.resultTTL,
 	}).SetupWithManager(mgr); err != nil {
 		return fmt.Errorf("creating controller: %w", err)
+	}
+
+	if opts.enableWebhook {
+		if err := (&webhook.BestPracticeScannerValidator{}).SetupWithManager(mgr); err != nil {
+			return fmt.Errorf("creating webhook: %w", err)
+		}
 	}
 
 	if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {
