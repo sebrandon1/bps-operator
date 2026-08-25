@@ -1,0 +1,26 @@
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingWebhookConfiguration
+metadata:
+  name: validating-webhook-configuration
+webhooks:
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: webhook-service
+      namespace: system
+      path: /validate-bps-openshift-io-v1alpha1-bestpracticescanner
+  failurePolicy: Fail
+  name: vbestpracticescanner.kb.io
+  rules:
+  - apiGroups:
+    - bps.openshift.io
+    apiVersions:
+    - v1alpha1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - bestpracticescanners
+  sideEffects: None
