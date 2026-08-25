@@ -278,6 +278,12 @@ release-tag: ## Create and push a release tag (usage: make release-tag VERSION=v
 coverage-html: test
 	go tool cover -html=cover.out
 
+##@ Checks
+
+.PHONY: list-checks
+list-checks: ## List all available check names (for use in spec.checks)
+	@go run ./cmd/list-checks/
+
 ##@ Help
 
 .PHONY: help
