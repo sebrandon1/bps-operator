@@ -15,9 +15,24 @@ config/
   rbac/                  RBAC manifests
   manager/               Operator Deployment manifest
   samples/               Example CRs and test workloads
+  grafana/               Grafana dashboard JSON for Prometheus metrics
+  webhook/               ValidatingWebhookConfiguration manifest
 ```
 
 CRD type definitions (`BestPracticeScanner`, `BestPracticeResult`) live in the external [checks-types](https://github.com/redhat-best-practices-for-k8s/checks-types) library. Both CRs use API group `bps.openshift.io/v1alpha1`.
+
+## Prometheus Metrics
+
+The operator exposes four Prometheus metrics via the controller-runtime metrics endpoint (default `:8080/metrics`):
+
+| Metric | Type | Labels | Description |
+|---|---|---|---|
+| `bps_scan_duration_seconds` | Histogram | `scanner`, `namespace` | Duration of each full scan |
+| `bps_scans_total` | Counter | `scanner`, `namespace` | Total completed scans |
+| `bps_check_results` | Gauge | `scanner`, `namespace`, `status` | Check result counts by status from the most recent scan |
+| `bps_check_duration_seconds` | Histogram | `check`, `category` | Duration of individual checks |
+
+A pre-built Grafana dashboard is available at `config/grafana/dashboard.json`. Import it into any Grafana instance connected to Prometheus.
 
 ## Check Library
 

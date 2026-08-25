@@ -7,7 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Webhook validation for `BestPracticeScanner` CRD: rejects invalid `scanInterval` formats and unknown check names at admission time (#164)
+- Prometheus metric `bps_check_duration_seconds` for per-check execution timing with `check` and `category` labels (#162)
+- Grafana dashboard JSON for Prometheus metrics at `config/grafana/dashboard.json` (#163)
+- `make list-checks` target to print all valid check names (#160)
+
 ### Changed
+- Retry with backoff for Pyxis API failures (#161)
+- `make show-failures` now includes remediation guidance in output (#159)
 - Fixed stale documentation across README and `docs/` (apiVersion, check names, project layout, CRD fields, make targets)
 - Updated CHANGELOG through v0.0.17
 
