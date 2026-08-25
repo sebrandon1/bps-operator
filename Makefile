@@ -243,7 +243,7 @@ show-results: ## Show scan results from the cluster
 show-failures: ## Show details for all non-compliant results
 	@echo "=== Non-Compliant Checks ==="
 	@$(KUBECTL) get bestpracticeresults -n $(TEST_NAMESPACE) \
-		-o jsonpath='{range .items[?(@.spec.complianceStatus=="NonCompliant")]}{.spec.checkName}{"\t"}{.spec.reason}{"\n"}{end}' 2>/dev/null \
+		-o jsonpath='{range .items[?(@.spec.complianceStatus=="NonCompliant")]}{.spec.checkName}{"\t"}{.spec.reason}{"\t"}{.spec.remediation}{"\n"}{end}' 2>/dev/null \
 		| column -t -s $$'\t' || echo "No results found"
 
 .PHONY: show-scan-yaml
