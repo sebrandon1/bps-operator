@@ -37,3 +37,12 @@ spec:
 - **scanInterval**: How often to re-scan (e.g., "5m", "1h30m", "10s"). Must be a valid Go duration string. Omit for a one-shot scan. The API validates this format at admission time, rejecting invalid durations like "5mins" or "1 hour".
 - **checks**: Run only specific checks by name. Omit to run all checks.
 - **suspend**: Set to `true` to pause periodic scanning.
+
+## Admission Validation
+
+The operator ships a validating webhook for `BestPracticeScanner` resources. On every `CREATE` or `UPDATE`, the webhook enforces:
+
+- **`spec.scanInterval`**: Must be a valid Go duration string (e.g. `5m`, `1h30m`). Empty (one-shot) is allowed.
+- **`spec.checks`**: Every named check must be a known check identifier. Run `make list-checks` to see valid names.
+
+Invalid resources are rejected at admission time with a descriptive error message. The webhook has `failurePolicy: Fail`.

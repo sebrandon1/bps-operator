@@ -13,6 +13,7 @@ Run `make help` for the full annotated target list.
 | `make lint` | Run golangci-lint |
 | `make fmt` | Run `go fmt` |
 | `make vet` | Run `go vet` |
+| `make list-checks` | Print all valid check names |
 | `make generate` | Regenerate deepcopy functions |
 | `make manifests` | Regenerate CRD and RBAC manifests |
 | `make build-image` | Build container image |
