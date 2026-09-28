@@ -5,6 +5,7 @@ import (
 	"compress/gzip"
 	"context"
 	"encoding/json"
+	"errors"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -39,6 +40,14 @@ func (c *concurrencyTrackingClient) List(ctx context.Context, list client.Object
 
 	time.Sleep(10 * time.Millisecond)
 	return c.Client.List(ctx, list, opts...)
+}
+
+type listErrorClient struct {
+	client.Client
+}
+
+func (*listErrorClient) List(context.Context, client.ObjectList, ...client.ListOption) error {
+	return errors.New("list failed")
 }
 
 func TestDiscover(t *testing.T) {
@@ -95,6 +104,17 @@ func TestDiscoverListsResourcesConcurrently(t *testing.T) {
 	}
 	if got := c.maxActive.Load(); got < 2 {
 		t.Errorf("maximum concurrent List calls = %d, want at least 2", got)
+	}
+}
+
+func TestDiscoverReturnsRequiredListError(t *testing.T) {
+	c := &listErrorClient{Client: fake.NewClientBuilder().Build()}
+	resources, err := Discover(context.Background(), c, "test-ns", nil, nil)
+	if err == nil {
+		t.Fatal("expected error from required resource list")
+	}
+	if resources != nil {
+		t.Error("expected nil resources when required list fails")
 	}
 }
 
