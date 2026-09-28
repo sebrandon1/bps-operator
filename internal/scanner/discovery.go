@@ -8,10 +8,10 @@ import (
 	"io"
 
 	netattdefv1 "github.com/k8snetworkplumbingwg/network-attachment-definition-client/pkg/apis/k8s.cni.cncf.io/v1"
-	olmv1alpha1 "github.com/operator-framework/api/pkg/operators/v1alpha1"
-	olmpackagev1 "github.com/operator-framework/operator-lifecycle-manager/pkg/package-server/apis/operators/v1"
 	apiserverv1 "github.com/openshift/api/apiserver/v1"
 	configv1 "github.com/openshift/api/config/v1"
+	olmv1alpha1 "github.com/operator-framework/api/pkg/operators/v1alpha1"
+	olmpackagev1 "github.com/operator-framework/operator-lifecycle-manager/pkg/package-server/apis/operators/v1"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
@@ -27,7 +27,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/redhat-best-practices-for-k8s/checks"
+	"golang.org/x/sync/errgroup"
 )
+
+const maxConcurrentDiscoveryCalls = 8
 
 // listOptional lists resources and silently returns false if the API is not registered (for OpenShift/OLM types).
 func listOptional(ctx context.Context, c client.Client, list client.ObjectList, opts ...client.ListOption) bool {
@@ -52,109 +55,133 @@ func Discover(ctx context.Context, c client.Client, namespace string, labelSelec
 	}
 	nsOpts := []client.ListOption{client.InNamespace(namespace)}
 
+	group, groupCtx := errgroup.WithContext(ctx)
+	group.SetLimit(maxConcurrentDiscoveryCalls)
+	listRequired := func(list client.ObjectList, opts ...client.ListOption) {
+		group.Go(func() error {
+			return c.List(groupCtx, list, opts...)
+		})
+	}
+	listOptionalInGroup := func(list client.ObjectList, onSuccess func(), opts ...client.ListOption) {
+		group.Go(func() error {
+			if listOptional(groupCtx, c, list, opts...) {
+				onSuccess()
+			}
+			return nil
+		})
+	}
+
 	// --- Core K8s resources (required) ---
-
 	var pods corev1.PodList
-	if err := c.List(ctx, &pods, labelOpts...); err != nil {
-		return nil, err
-	}
-	resources.Pods = pods.Items
-
+	listRequired(&pods, labelOpts...)
 	var services corev1.ServiceList
-	if err := c.List(ctx, &services, nsOpts...); err != nil {
-		return nil, err
-	}
-	resources.Services = services.Items
-
+	listRequired(&services, nsOpts...)
 	var serviceAccounts corev1.ServiceAccountList
-	if err := c.List(ctx, &serviceAccounts, nsOpts...); err != nil {
-		return nil, err
-	}
-	resources.ServiceAccounts = serviceAccounts.Items
-
+	listRequired(&serviceAccounts, nsOpts...)
 	var roles rbacv1.RoleList
-	if err := c.List(ctx, &roles, nsOpts...); err != nil {
-		return nil, err
-	}
-	resources.Roles = roles.Items
-
+	listRequired(&roles, nsOpts...)
 	var roleBindings rbacv1.RoleBindingList
-	if err := c.List(ctx, &roleBindings, nsOpts...); err != nil {
-		return nil, err
-	}
-	resources.RoleBindings = roleBindings.Items
-
+	listRequired(&roleBindings, nsOpts...)
 	var crbs rbacv1.ClusterRoleBindingList
-	if err := c.List(ctx, &crbs); err != nil {
-		return nil, err
-	}
-	resources.ClusterRoleBindings = crbs.Items
-
+	listRequired(&crbs)
 	var crds apiextv1.CustomResourceDefinitionList
-	if err := c.List(ctx, &crds); err != nil {
-		return nil, err
-	}
-	resources.CRDs = crds.Items
-
+	listRequired(&crds)
 	var deployments appsv1.DeploymentList
-	if err := c.List(ctx, &deployments, nsOpts...); err != nil {
-		return nil, err
-	}
-	resources.Deployments = deployments.Items
-
+	listRequired(&deployments, nsOpts...)
 	var statefulSets appsv1.StatefulSetList
-	if err := c.List(ctx, &statefulSets, nsOpts...); err != nil {
-		return nil, err
-	}
-	resources.StatefulSets = statefulSets.Items
-
+	listRequired(&statefulSets, nsOpts...)
 	var daemonSets appsv1.DaemonSetList
-	if err := c.List(ctx, &daemonSets, nsOpts...); err != nil {
-		return nil, err
-	}
-	resources.DaemonSets = daemonSets.Items
-
+	listRequired(&daemonSets, nsOpts...)
 	var netPolicies networkingv1.NetworkPolicyList
-	if err := c.List(ctx, &netPolicies, nsOpts...); err != nil {
-		return nil, err
-	}
-	resources.NetworkPolicies = netPolicies.Items
-
+	listRequired(&netPolicies, nsOpts...)
 	var quotas corev1.ResourceQuotaList
-	if err := c.List(ctx, &quotas, nsOpts...); err != nil {
-		return nil, err
-	}
-	resources.ResourceQuotas = quotas.Items
-
+	listRequired(&quotas, nsOpts...)
 	var pdbs policyv1.PodDisruptionBudgetList
-	if err := c.List(ctx, &pdbs, nsOpts...); err != nil {
-		return nil, err
-	}
-	resources.PodDisruptionBudgets = pdbs.Items
-
+	listRequired(&pdbs, nsOpts...)
 	var nodes corev1.NodeList
-	if err := c.List(ctx, &nodes); err != nil {
-		return nil, err
-	}
-	resources.Nodes = nodes.Items
-
+	listRequired(&nodes)
 	var pvs corev1.PersistentVolumeList
-	if err := c.List(ctx, &pvs); err != nil {
-		return nil, err
-	}
-	resources.PersistentVolumes = pvs.Items
-
+	listRequired(&pvs)
 	var scs storagev1.StorageClassList
-	if err := c.List(ctx, &scs); err != nil {
+	listRequired(&scs)
+	var secrets corev1.SecretList
+	listRequired(&secrets, nsOpts...)
+
+	// K8s version
+	if discoveryClient != nil {
+		group.Go(func() error {
+			if info, err := discoveryClient.ServerVersion(); err == nil {
+				resources.K8sVersion = info.GitVersion
+			}
+			return nil
+		})
+	}
+
+	// --- OpenShift-specific resources (optional — graceful skip) ---
+	var cv configv1.ClusterVersion
+	group.Go(func() error {
+		if err := c.Get(groupCtx, types.NamespacedName{Name: "version"}, &cv); err == nil {
+			resources.ClusterVersion = &cv
+			resources.OpenshiftVersion = extractOpenshiftVersion(&cv)
+			resources.OCPStatus = deriveOCPStatus(&cv, resources.OpenshiftVersion)
+		}
+		return nil
+	})
+	var cos configv1.ClusterOperatorList
+	listOptionalInGroup(&cos, func() { resources.ClusterOperators = cos.Items })
+	var arcs apiserverv1.APIRequestCountList
+	listOptionalInGroup(&arcs, func() { resources.APIRequestCounts = arcs.Items })
+
+	// --- OLM resources (optional — graceful skip) ---
+	var csvs olmv1alpha1.ClusterServiceVersionList
+	listOptionalInGroup(&csvs, func() { resources.CSVs = csvs.Items }, nsOpts...)
+	var catalogs olmv1alpha1.CatalogSourceList
+	listOptionalInGroup(&catalogs, func() { resources.CatalogSources = catalogs.Items })
+	var subs olmv1alpha1.SubscriptionList
+	listOptionalInGroup(&subs, func() { resources.Subscriptions = subs.Items }, nsOpts...)
+	var pkgs olmpackagev1.PackageManifestList
+	listOptionalInGroup(&pkgs, func() { resources.PackageManifests = pkgs.Items }, nsOpts...)
+
+	// --- Networking resources (optional — graceful skip) ---
+	var nads netattdefv1.NetworkAttachmentDefinitionList
+	listOptionalInGroup(&nads, func() { resources.NetworkAttachmentDefinitions = nads.Items }, nsOpts...)
+
+	// SR-IOV resources (unstructured)
+	group.Go(func() error {
+		resources.SriovNetworks = listUnstructured(groupCtx, c, schema.GroupVersionResource{
+			Group: "sriovnetwork.openshift.io", Version: "v1", Resource: "sriovnetworks",
+		}, namespace)
+		return nil
+	})
+	group.Go(func() error {
+		resources.SriovNetworkNodePolicies = listUnstructured(groupCtx, c, schema.GroupVersionResource{
+			Group: "sriovnetwork.openshift.io", Version: "v1", Resource: "sriovnetworknodepolicies",
+		}, "")
+		return nil
+	})
+
+	if err := group.Wait(); err != nil {
 		return nil, err
 	}
+
+	resources.Pods = pods.Items
+	resources.Services = services.Items
+	resources.ServiceAccounts = serviceAccounts.Items
+	resources.Roles = roles.Items
+	resources.RoleBindings = roleBindings.Items
+	resources.ClusterRoleBindings = crbs.Items
+	resources.CRDs = crds.Items
+	resources.Deployments = deployments.Items
+	resources.StatefulSets = statefulSets.Items
+	resources.DaemonSets = daemonSets.Items
+	resources.NetworkPolicies = netPolicies.Items
+	resources.ResourceQuotas = quotas.Items
+	resources.PodDisruptionBudgets = pdbs.Items
+	resources.Nodes = nodes.Items
+	resources.PersistentVolumes = pvs.Items
 	resources.StorageClasses = scs.Items
 
 	// Helm chart releases (secrets with type helm.sh/release.v1)
-	var secrets corev1.SecretList
-	if err := c.List(ctx, &secrets, nsOpts...); err != nil {
-		return nil, err
-	}
 	for i := range secrets.Items {
 		if secrets.Items[i].Type == "helm.sh/release.v1" {
 			if release, ok := parseHelmRelease(&secrets.Items[i]); ok {
@@ -163,71 +190,8 @@ func Discover(ctx context.Context, c client.Client, namespace string, labelSelec
 		}
 	}
 
-	// K8s version
-	if discoveryClient != nil {
-		if info, err := discoveryClient.ServerVersion(); err == nil {
-			resources.K8sVersion = info.GitVersion
-		}
-	}
-
-	// Scalable CRD resources
+	// Scalable CRD resources depend on the CRDs list.
 	resources.ScalableResources = discoverScalableResources(ctx, c, crds.Items, namespace)
-
-	// --- OpenShift-specific resources (optional — graceful skip) ---
-
-	var cv configv1.ClusterVersion
-	if err := c.Get(ctx, types.NamespacedName{Name: "version"}, &cv); err == nil {
-		resources.ClusterVersion = &cv
-		resources.OpenshiftVersion = extractOpenshiftVersion(&cv)
-		resources.OCPStatus = deriveOCPStatus(&cv, resources.OpenshiftVersion)
-	}
-
-	var cos configv1.ClusterOperatorList
-	if listOptional(ctx, c, &cos) {
-		resources.ClusterOperators = cos.Items
-	}
-
-	var arcs apiserverv1.APIRequestCountList
-	if listOptional(ctx, c, &arcs) {
-		resources.APIRequestCounts = arcs.Items
-	}
-
-	// --- OLM resources (optional — graceful skip) ---
-
-	var csvs olmv1alpha1.ClusterServiceVersionList
-	if listOptional(ctx, c, &csvs, nsOpts...) {
-		resources.CSVs = csvs.Items
-	}
-
-	var catalogs olmv1alpha1.CatalogSourceList
-	if listOptional(ctx, c, &catalogs) {
-		resources.CatalogSources = catalogs.Items
-	}
-
-	var subs olmv1alpha1.SubscriptionList
-	if listOptional(ctx, c, &subs, nsOpts...) {
-		resources.Subscriptions = subs.Items
-	}
-
-	var pkgs olmpackagev1.PackageManifestList
-	if listOptional(ctx, c, &pkgs, nsOpts...) {
-		resources.PackageManifests = pkgs.Items
-	}
-
-	// --- Networking resources (optional — graceful skip) ---
-
-	var nads netattdefv1.NetworkAttachmentDefinitionList
-	if listOptional(ctx, c, &nads, nsOpts...) {
-		resources.NetworkAttachmentDefinitions = nads.Items
-	}
-
-	// SR-IOV resources (unstructured)
-	resources.SriovNetworks = listUnstructured(ctx, c, schema.GroupVersionResource{
-		Group: "sriovnetwork.openshift.io", Version: "v1", Resource: "sriovnetworks",
-	}, namespace)
-	resources.SriovNetworkNodePolicies = listUnstructured(ctx, c, schema.GroupVersionResource{
-		Group: "sriovnetwork.openshift.io", Version: "v1", Resource: "sriovnetworknodepolicies",
-	}, "")
 
 	return resources, nil
 }
