@@ -5,7 +5,9 @@ import (
 	"compress/gzip"
 	"context"
 	"encoding/json"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -16,8 +18,28 @@ import (
 	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
+
+type concurrencyTrackingClient struct {
+	client.Client
+	active    atomic.Int32
+	maxActive atomic.Int32
+}
+
+func (c *concurrencyTrackingClient) List(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error {
+	active := c.active.Add(1)
+	for max := c.maxActive.Load(); active > max; max = c.maxActive.Load() {
+		if c.maxActive.CompareAndSwap(max, active) {
+			break
+		}
+	}
+	defer c.active.Add(-1)
+
+	time.Sleep(10 * time.Millisecond)
+	return c.Client.List(ctx, list, opts...)
+}
 
 func TestDiscover(t *testing.T) {
 	scheme := runtime.NewScheme()
@@ -52,6 +74,27 @@ func TestDiscover(t *testing.T) {
 	}
 	if resources.Namespaces[0] != "test-ns" {
 		t.Errorf("expected namespace test-ns, got %s", resources.Namespaces[0])
+	}
+}
+
+func TestDiscoverListsResourcesConcurrently(t *testing.T) {
+	scheme := runtime.NewScheme()
+	_ = corev1.AddToScheme(scheme)
+	_ = rbacv1.AddToScheme(scheme)
+	_ = appsv1.AddToScheme(scheme)
+	_ = networkingv1.AddToScheme(scheme)
+	_ = policyv1.AddToScheme(scheme)
+	_ = storagev1.AddToScheme(scheme)
+	_ = apiextv1.AddToScheme(scheme)
+
+	c := &concurrencyTrackingClient{
+		Client: fake.NewClientBuilder().WithScheme(scheme).Build(),
+	}
+	if _, err := Discover(context.Background(), c, "test-ns", nil, nil); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got := c.maxActive.Load(); got < 2 {
+		t.Errorf("maximum concurrent List calls = %d, want at least 2", got)
 	}
 }
 
