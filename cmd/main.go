@@ -7,10 +7,10 @@ import (
 	"time"
 
 	netattdefv1 "github.com/k8snetworkplumbingwg/network-attachment-definition-client/pkg/apis/k8s.cni.cncf.io/v1"
-	olmv1alpha1 "github.com/operator-framework/api/pkg/operators/v1alpha1"
-	olmpackagev1 "github.com/operator-framework/operator-lifecycle-manager/pkg/package-server/apis/operators/v1"
 	apiserverv1 "github.com/openshift/api/apiserver/v1"
 	configv1 "github.com/openshift/api/config/v1"
+	olmv1alpha1 "github.com/operator-framework/api/pkg/operators/v1alpha1"
+	olmpackagev1 "github.com/operator-framework/operator-lifecycle-manager/pkg/package-server/apis/operators/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/client-go/dynamic"
@@ -27,8 +27,8 @@ import (
 
 	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 
-	checksall "github.com/redhat-best-practices-for-k8s/checks/all"
 	bpsv1alpha1 "github.com/redhat-best-practices-for-k8s/checks-types/api/v1alpha1"
+	checksall "github.com/redhat-best-practices-for-k8s/checks/all"
 	"github.com/sebrandon1/bps-operator/internal/certification"
 	"github.com/sebrandon1/bps-operator/internal/controller"
 	"github.com/sebrandon1/bps-operator/internal/probe"
@@ -139,7 +139,7 @@ func run(opts options, cfg *rest.Config) error {
 	if err := (&controller.ScannerReconciler{
 		Client:            mgr.GetClient(),
 		Scheme:            mgr.GetScheme(),
-		Recorder:          mgr.GetEventRecorderFor("scanner"), //nolint:staticcheck // TODO: migrate to GetEventRecorder (events.EventRecorder)
+		Recorder:          mgr.GetEventRecorder("scanner"),
 		ProbeExecutor:     probeExecutor,
 		OperatorNamespace: opts.operatorNamespace,
 		ProbeImage:        opts.probeImage,
