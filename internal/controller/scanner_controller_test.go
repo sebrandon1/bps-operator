@@ -2,7 +2,9 @@ package controller
 
 import (
 	"context"
+	"errors"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -16,13 +18,13 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/client-go/tools/record"
+	"k8s.io/client-go/tools/events"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
-	checksall "github.com/redhat-best-practices-for-k8s/checks/all"
 	bpsv1alpha1 "github.com/redhat-best-practices-for-k8s/checks-types/api/v1alpha1"
+	checksall "github.com/redhat-best-practices-for-k8s/checks/all"
 )
 
 func TestMain(m *testing.M) {
@@ -44,7 +46,25 @@ func newScheme() *runtime.Scheme {
 }
 
 func newReconciler(c client.Client, s *runtime.Scheme) *ScannerReconciler {
-	return &ScannerReconciler{Client: c, Scheme: s, Recorder: record.NewFakeRecorder(10)}
+	return &ScannerReconciler{Client: c, Scheme: s, Recorder: events.NewFakeRecorder(10)}
+}
+
+type probePodListErrorClient struct {
+	client.Client
+	namespace string
+}
+
+func (c probePodListErrorClient) List(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error {
+	if _, ok := list.(*corev1.PodList); ok {
+		listOptions := &client.ListOptions{}
+		for _, opt := range opts {
+			opt.ApplyToList(listOptions)
+		}
+		if listOptions.Namespace == c.namespace {
+			return errors.New("injected probe pod list failure")
+		}
+	}
+	return c.Client.List(ctx, list, opts...)
 }
 
 func TestReconcile_ScannerNotFound(t *testing.T) {
@@ -116,12 +136,21 @@ func TestReconcile_FullScan(t *testing.T) {
 		WithStatusSubresource(scanner).
 		Build()
 
-	r := newReconciler(c, s)
+	recorder := events.NewFakeRecorder(2)
+	recorder.Verbose = true
+	r := &ScannerReconciler{Client: c, Scheme: s, Recorder: recorder}
 	_, err := r.Reconcile(context.Background(), ctrl.Request{
 		NamespacedName: types.NamespacedName{Name: "scanner", Namespace: "ns"},
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if event := <-recorder.Events; !strings.HasPrefix(event, "Normal ScanStarted Scan Starting compliance scan") {
+		t.Errorf("unexpected scan start event: %q", event)
+	}
+	if event := <-recorder.Events; !strings.HasPrefix(event, "Normal ScanCompleted Scan Scan completed: 1 compliant, 0 non-compliant, 0 skipped, 0 errors (") {
+		t.Errorf("unexpected scan completion event: %q", event)
 	}
 
 	// Verify result was created
@@ -154,6 +183,78 @@ func TestReconcile_FullScan(t *testing.T) {
 	if updated.Status.Summary.Compliant != 1 {
 		t.Errorf("expected compliant 1, got %d", updated.Status.Summary.Compliant)
 	}
+}
+
+func TestReconcile_DiscoveryFailureEvent(t *testing.T) {
+	s := newScheme()
+	scanner := &bpsv1alpha1.BestPracticeScanner{
+		ObjectMeta: metav1.ObjectMeta{Name: "scanner", Namespace: "ns"},
+		Spec: bpsv1alpha1.BestPracticeScannerSpec{
+			LabelSelector: &metav1.LabelSelector{
+				MatchExpressions: []metav1.LabelSelectorRequirement{{
+					Key: "app", Operator: metav1.LabelSelectorOperator("unsupported"),
+				}},
+			},
+		},
+	}
+	c := fake.NewClientBuilder().WithScheme(s).
+		WithObjects(scanner).
+		WithStatusSubresource(scanner).
+		Build()
+
+	recorder := events.NewFakeRecorder(2)
+	recorder.Verbose = true
+	r := &ScannerReconciler{Client: c, Scheme: s, Recorder: recorder}
+	_, err := r.Reconcile(context.Background(), ctrl.Request{
+		NamespacedName: types.NamespacedName{Name: "scanner", Namespace: "ns"},
+	})
+	if err == nil {
+		t.Fatal("expected resource discovery error")
+	}
+
+	<-recorder.Events // ScanStarted
+	if event := <-recorder.Events; !strings.HasPrefix(event, "Warning ScanFailed ResourceDiscovery Resource discovery failed: ") {
+		t.Errorf("unexpected resource discovery event: %q", event)
+	}
+}
+
+func TestReconcile_ProbeMappingFailureEvent(t *testing.T) {
+	s := newScheme()
+	scanner := &bpsv1alpha1.BestPracticeScanner{
+		ObjectMeta: metav1.ObjectMeta{Name: "scanner", Namespace: "ns"},
+		Spec: bpsv1alpha1.BestPracticeScannerSpec{
+			Checks: []string{"access-control-pod-host-network"},
+		},
+	}
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{Name: "pod", Namespace: "ns"},
+		Spec:       corev1.PodSpec{Containers: []corev1.Container{{Name: "c1", Image: "img"}}},
+	}
+	c := fake.NewClientBuilder().WithScheme(s).
+		WithObjects(scanner, pod).
+		WithStatusSubresource(scanner).
+		Build()
+
+	recorder := events.NewFakeRecorder(3)
+	recorder.Verbose = true
+	r := &ScannerReconciler{
+		Client:            probePodListErrorClient{Client: c, namespace: "operator"},
+		Scheme:            s,
+		Recorder:          recorder,
+		OperatorNamespace: "operator",
+	}
+	_, err := r.Reconcile(context.Background(), ctrl.Request{
+		NamespacedName: types.NamespacedName{Name: "scanner", Namespace: "ns"},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	<-recorder.Events // ScanStarted
+	if event := <-recorder.Events; event != "Warning ProbeUnavailable ProbeMapping Probe pods not available, probe-based checks will be skipped" {
+		t.Errorf("unexpected probe mapping event: %q", event)
+	}
+	<-recorder.Events // ScanCompleted
 }
 
 func TestReconcile_NonCompliant(t *testing.T) {
@@ -471,7 +572,7 @@ func TestReconcile_CatalogURL(t *testing.T) {
 	r := &ScannerReconciler{
 		Client:         c,
 		Scheme:         s,
-		Recorder:       record.NewFakeRecorder(10),
+		Recorder:       events.NewFakeRecorder(10),
 		CatalogURLBase: "https://example.com/CATALOG.md",
 	}
 	_, err := r.Reconcile(context.Background(), ctrl.Request{
@@ -598,7 +699,7 @@ func TestReconcile_ResultTTL(t *testing.T) {
 	r := &ScannerReconciler{
 		Client:    c,
 		Scheme:    s,
-		Recorder:  record.NewFakeRecorder(10),
+		Recorder:  events.NewFakeRecorder(10),
 		ResultTTL: 24 * time.Hour,
 	}
 	_, err := r.Reconcile(context.Background(), ctrl.Request{
@@ -702,7 +803,7 @@ func TestReconcile_ResultTTL_ZeroDisablesCleanup(t *testing.T) {
 	r := &ScannerReconciler{
 		Client:    c,
 		Scheme:    s,
-		Recorder:  record.NewFakeRecorder(10),
+		Recorder:  events.NewFakeRecorder(10),
 		ResultTTL: 0,
 	}
 	_, err := r.Reconcile(context.Background(), ctrl.Request{

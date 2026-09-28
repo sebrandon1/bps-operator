@@ -120,6 +120,14 @@ rules:
   - list
   - watch
 - apiGroups:
+  - events.k8s.io
+  resources:
+  - events
+  verbs:
+  - create
+  - patch
+  - update
+- apiGroups:
   - k8s.cni.cncf.io
   resources:
   - network-attachment-definitions
