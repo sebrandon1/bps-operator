@@ -68,7 +68,7 @@ test-e2e: build-image ## Run e2e tests against a Kind cluster
 	@$(KUBECTL) get bestpracticeresults -n $(TEST_NAMESPACE)
 	@echo ""
 	@echo "=== Verify Events ==="
-	@EVENTS=$$($(KUBECTL) get events -n $(TEST_NAMESPACE) --field-selector reason=ScanCompleted -o jsonpath='{.items}' 2>/dev/null); \
+	@EVENTS=$$($(KUBECTL) get events.events.k8s.io -n $(TEST_NAMESPACE) --field-selector reason=ScanCompleted -o jsonpath='{.items}' 2>/dev/null); \
 	if [ "$$EVENTS" = "[]" ] || [ -z "$$EVENTS" ]; then \
 		echo "FAIL: No ScanCompleted event found"; exit 1; \
 	else \
