@@ -83,7 +83,7 @@ jobs:
 
       - name: Check coverage threshold
         run: |
-          THRESHOLD=15
+          THRESHOLD=60
           COVERAGE=$(go tool cover -func=cover.out \
             | grep -v 'zz_generated' \
             | grep '^total:' \
