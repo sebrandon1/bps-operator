@@ -7,17 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.19] - 2026-09-29
+
+### Added
+- Parallel resource discovery API calls with `errgroup` (#184)
+- Pyxis API response caching with a TTL (#183)
+
+### Changed
+- Migrated from deprecated `GetEventRecorderFor` to `GetEventRecorder` (#185)
+- Updated Go to 1.27.1 and refreshed checks, Kubernetes, gRPC, container, and GitHub Actions dependencies (#166-#182)
+- Added a `go mod tidy` CI check and raised the test coverage threshold to 60% (#186, #187)
+
+## [0.0.18] - 2026-08-25
+
 ### Added
 - Webhook validation for `BestPracticeScanner` CRD: rejects invalid `scanInterval` formats and unknown check names at admission time (#164)
 - Prometheus metric `bps_check_duration_seconds` for per-check execution timing with `check` and `category` labels (#162)
 - Grafana dashboard JSON for Prometheus metrics at `config/grafana/dashboard.json` (#163)
 - `make list-checks` target to print all valid check names (#160)
+- Resource limits for probe DaemonSet containers (#150)
+- Size limit for Helm secret gzip decompression (#151)
+- Race detector for unit test runs (#152)
 
 ### Changed
 - Retry with backoff for Pyxis API failures (#161)
 - `make show-failures` now includes remediation guidance in output (#159)
-- Fixed stale documentation across README and `docs/` (apiVersion, check names, project layout, CRD fields, make targets)
-- Updated CHANGELOG through v0.0.17
+- Updated README and `docs/` for current API versions, check names, CRD fields, and make targets (#165)
 
 ## [0.0.17] - 2026-07-13
 
