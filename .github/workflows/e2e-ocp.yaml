@@ -104,8 +104,8 @@ jobs:
         run: |
           make manifests
           oc apply -f config/crd/bases/
-          oc wait --for=condition=Established crd/bestpracticescanners.bps.openshift.io --timeout=30s
-          oc wait --for=condition=Established crd/bestpracticeresults.bps.openshift.io --timeout=30s
+          bash .github/scripts/wait-for-crd-established.sh bestpracticescanners.bps.openshift.io
+          bash .github/scripts/wait-for-crd-established.sh bestpracticeresults.bps.openshift.io
           oc apply -f config/rbac/
 
           # Inject the correct image before applying to avoid a double rollout
