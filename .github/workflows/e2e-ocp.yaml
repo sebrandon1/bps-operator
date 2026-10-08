@@ -52,7 +52,7 @@ jobs:
 
       - name: Deploy OCP cluster
         id: deploy-cluster
-        uses: palmsoftware/quick-ocp@4f3af90718239bd6ff2db98c9feb067391dd9b40 # v1.0.4
+        uses: palmsoftware/quick-ocp@4926cc468c13717996450985954f8ac44eda2ef3 # v1.0.6
         with:
           ocpPullSecret: $OCP_PULL_SECRET
           bundleCache: true
