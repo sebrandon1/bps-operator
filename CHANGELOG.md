@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.20] - 2026-10-12
+
+### Changed
+- Updated Kubernetes, `golang.org/x/sync`, and `checks-types` dependencies (#189, #191, #192)
+- Updated GitHub Actions and `palmsoftware/quick-ocp` (#190, #193)
+
 ## [0.0.19] - 2026-09-29
 
 ### Added
