@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.21] - 2026-10-12
+
+### Security
+- Updated Go to 1.27.2 to fix standard library vulnerabilities in `crypto/tls`, `net/http`, and `net/textproto` (#194)
+
 ## [0.0.20] - 2026-10-12
 
 ### Changed
