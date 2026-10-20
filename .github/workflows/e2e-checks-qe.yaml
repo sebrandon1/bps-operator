@@ -53,10 +53,15 @@ jobs:
           kubectl rollout status deployment/bps-operator-controller-manager -n bps-operator-system --timeout=120s
 
       - name: Run checks-qe in operator mode
-        run: |
-          docker run --rm \
-            --network host \
-            -v $HOME/.kube/config:/tmp/kubeconfig:ro \
-            -e KUBECONFIG=/tmp/kubeconfig \
-            $CHECKS_QE_IMAGE \
-            run --mode operator --skip-ocp --skip-probe --parallel 4 --verbose
+        uses: nick-fields/retry@ad984534de44a9489a53aefd81eb77f87c70dc60 # v4.0.0
+        with:
+          max_attempts: 3
+          timeout_minutes: 20
+          retry_wait_seconds: 60
+          command: |
+            docker run --rm \
+              --network host \
+              -v $HOME/.kube/config:/tmp/kubeconfig:ro \
+              -e KUBECONFIG=/tmp/kubeconfig \
+              $CHECKS_QE_IMAGE \
+              run --mode operator --skip-ocp --skip-probe --parallel 4 --verbose
