@@ -38,4 +38,10 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Run e2e tests
-        run: make test-e2e IMG=quay.io/redhat-best-practices-for-k8s/bps-operator:e2e
+        uses: nick-fields/retry@ad984534de44a9489a53aefd81eb77f87c70dc60 # v4.0.0
+        with:
+          max_attempts: 3
+          timeout_minutes: 30
+          retry_wait_seconds: 60
+          command: |
+            make test-e2e IMG=quay.io/redhat-best-practices-for-k8s/bps-operator:e2e

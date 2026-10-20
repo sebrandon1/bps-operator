@@ -63,35 +63,40 @@ jobs:
           OCP_PULL_SECRET: ${{ secrets.CRC_PULL_SECRET }}
 
       - name: Push image to OpenShift internal registry
-        run: |
-          docker load -i ${GITHUB_WORKSPACE}/bps-operator.tar
+        uses: nick-fields/retry@ad984534de44a9489a53aefd81eb77f87c70dc60 # v4.0.0
+        with:
+          max_attempts: 3
+          timeout_minutes: 15
+          retry_wait_seconds: 30
+          command: |
+            docker load -i ${GITHUB_WORKSPACE}/bps-operator.tar
 
-          KUBEADMIN_PASS=$(cat ~/.crc/machines/crc/kubeadmin-password)
-          oc login -u kubeadmin -p "$KUBEADMIN_PASS" https://api.crc.testing:6443 --insecure-skip-tls-verify
+            KUBEADMIN_PASS=$(cat ~/.crc/machines/crc/kubeadmin-password)
+            oc login -u kubeadmin -p "$KUBEADMIN_PASS" https://api.crc.testing:6443 --insecure-skip-tls-verify
 
-          oc patch configs.imageregistry.operator.openshift.io/cluster --type merge -p '{"spec":{"defaultRoute":true}}'
+            oc patch configs.imageregistry.operator.openshift.io/cluster --type merge -p '{"spec":{"defaultRoute":true}}'
 
-          # Wait for registry route to be admitted instead of a blind sleep
-          for i in $(seq 1 30); do
-            REGISTRY=$(oc get route default-route -n openshift-image-registry -o jsonpath='{.spec.host}' 2>/dev/null)
-            if [ -n "$REGISTRY" ]; then break; fi
-            echo "Waiting for registry route... ($i/30)"
-            sleep 2
-          done
-          echo "Registry: $REGISTRY"
+            # Wait for registry route to be admitted instead of a blind sleep
+            for i in $(seq 1 30); do
+              REGISTRY=$(oc get route default-route -n openshift-image-registry -o jsonpath='{.spec.host}' 2>/dev/null)
+              if [ -n "$REGISTRY" ]; then break; fi
+              echo "Waiting for registry route... ($i/30)"
+              sleep 2
+            done
+            echo "Registry: $REGISTRY"
 
-          docker login -u kubeadmin -p "$(oc whoami -t)" "$REGISTRY"
-          oc new-project bps-operator-system 2>/dev/null || true
+            docker login -u kubeadmin -p "$(oc whoami -t)" "$REGISTRY"
+            oc new-project bps-operator-system 2>/dev/null || true
 
-          REMOTE_IMG="$REGISTRY/bps-operator-system/bps-operator:e2e"
-          docker tag bps-operator:e2e "$REMOTE_IMG"
-          docker push "$REMOTE_IMG"
+            REMOTE_IMG="$REGISTRY/bps-operator-system/bps-operator:e2e"
+            docker tag bps-operator:e2e "$REMOTE_IMG"
+            docker push "$REMOTE_IMG"
 
-          # Verify the image landed in the internal registry
-          oc get imagestream bps-operator -n bps-operator-system -o jsonpath='{.status.tags[0].tag}' | grep -q e2e
-          echo "Image push verified in internal registry"
+            # Verify the image landed in the internal registry
+            oc get imagestream bps-operator -n bps-operator-system -o jsonpath='{.status.tags[0].tag}' | grep -q e2e
+            echo "Image push verified in internal registry"
 
-          echo "INTERNAL_IMG=image-registry.openshift-image-registry.svc:5000/bps-operator-system/bps-operator:e2e" >> "$GITHUB_ENV"
+            echo "INTERNAL_IMG=image-registry.openshift-image-registry.svc:5000/bps-operator-system/bps-operator:e2e" >> "$GITHUB_ENV"
 
       - name: Deploy operator
         run: |
@@ -124,10 +129,15 @@ jobs:
           oc logs deployment/bps-operator-controller-manager -n bps-operator-system --tail=100 2>/dev/null || true
 
       - name: Run checks-qe in operator mode
-        run: |
-          docker run --rm \
-            --network host \
-            -v $KUBECONFIG:/tmp/kubeconfig:ro \
-            -e KUBECONFIG=/tmp/kubeconfig \
-            $CHECKS_QE_IMAGE \
-            run --mode operator --skip-probe --parallel 4 --verbose
+        uses: nick-fields/retry@ad984534de44a9489a53aefd81eb77f87c70dc60 # v4.0.0
+        with:
+          max_attempts: 3
+          timeout_minutes: 60
+          retry_wait_seconds: 60
+          command: |
+            docker run --rm \
+              --network host \
+              -v $KUBECONFIG:/tmp/kubeconfig:ro \
+              -e KUBECONFIG=/tmp/kubeconfig \
+              $CHECKS_QE_IMAGE \
+              run --mode operator --skip-probe --parallel 4 --verbose

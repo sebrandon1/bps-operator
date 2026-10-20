@@ -62,43 +62,48 @@ jobs:
           OCP_PULL_SECRET: ${{ secrets.CRC_PULL_SECRET }}
 
       - name: Push image to OpenShift internal registry
-        run: |
-          # Reload image (quick-ocp disk cleanup removes docker images)
-          docker load -i ${GITHUB_WORKSPACE}/bps-operator.tar
+        uses: nick-fields/retry@ad984534de44a9489a53aefd81eb77f87c70dc60 # v4.0.0
+        with:
+          max_attempts: 3
+          timeout_minutes: 15
+          retry_wait_seconds: 30
+          command: |
+            # Reload image (quick-ocp disk cleanup removes docker images)
+            docker load -i ${GITHUB_WORKSPACE}/bps-operator.tar
 
-          # Login to get a token (KUBECONFIG uses client certs, not tokens)
-          KUBEADMIN_PASS=$(cat ~/.crc/machines/crc/kubeadmin-password)
-          oc login -u kubeadmin -p "$KUBEADMIN_PASS" https://api.crc.testing:6443 --insecure-skip-tls-verify
+            # Login to get a token (KUBECONFIG uses client certs, not tokens)
+            KUBEADMIN_PASS=$(cat ~/.crc/machines/crc/kubeadmin-password)
+            oc login -u kubeadmin -p "$KUBEADMIN_PASS" https://api.crc.testing:6443 --insecure-skip-tls-verify
 
-          # Expose the internal registry via default route
-          oc patch configs.imageregistry.operator.openshift.io/cluster --type merge -p '{"spec":{"defaultRoute":true}}'
+            # Expose the internal registry via default route
+            oc patch configs.imageregistry.operator.openshift.io/cluster --type merge -p '{"spec":{"defaultRoute":true}}'
 
-          # Wait for registry route to be admitted instead of a blind sleep
-          for i in $(seq 1 30); do
-            REGISTRY=$(oc get route default-route -n openshift-image-registry -o jsonpath='{.spec.host}' 2>/dev/null)
-            if [ -n "$REGISTRY" ]; then break; fi
-            echo "Waiting for registry route... ($i/30)"
-            sleep 2
-          done
-          echo "Registry: $REGISTRY"
+            # Wait for registry route to be admitted instead of a blind sleep
+            for i in $(seq 1 30); do
+              REGISTRY=$(oc get route default-route -n openshift-image-registry -o jsonpath='{.spec.host}' 2>/dev/null)
+              if [ -n "$REGISTRY" ]; then break; fi
+              echo "Waiting for registry route... ($i/30)"
+              sleep 2
+            done
+            echo "Registry: $REGISTRY"
 
-          # Login to the internal registry with the token
-          docker login -u kubeadmin -p "$(oc whoami -t)" "$REGISTRY"
+            # Login to the internal registry with the token
+            docker login -u kubeadmin -p "$(oc whoami -t)" "$REGISTRY"
 
-          # Create the namespace for the image
-          oc new-project bps-operator-system 2>/dev/null || true
+            # Create the namespace for the image
+            oc new-project bps-operator-system 2>/dev/null || true
 
-          # Tag and push
-          REMOTE_IMG="$REGISTRY/bps-operator-system/bps-operator:e2e"
-          docker tag bps-operator:e2e "$REMOTE_IMG"
-          docker push "$REMOTE_IMG"
+            # Tag and push
+            REMOTE_IMG="$REGISTRY/bps-operator-system/bps-operator:e2e"
+            docker tag bps-operator:e2e "$REMOTE_IMG"
+            docker push "$REMOTE_IMG"
 
-          # Verify the image landed in the internal registry
-          oc get imagestream bps-operator -n bps-operator-system -o jsonpath='{.status.tags[0].tag}' | grep -q e2e
-          echo "Image push verified in internal registry"
+            # Verify the image landed in the internal registry
+            oc get imagestream bps-operator -n bps-operator-system -o jsonpath='{.status.tags[0].tag}' | grep -q e2e
+            echo "Image push verified in internal registry"
 
-          # Save the internal image reference for later steps
-          echo "INTERNAL_IMG=image-registry.openshift-image-registry.svc:5000/bps-operator-system/bps-operator:e2e" >> "$GITHUB_ENV"
+            # Save the internal image reference for later steps
+            echo "INTERNAL_IMG=image-registry.openshift-image-registry.svc:5000/bps-operator-system/bps-operator:e2e" >> "$GITHUB_ENV"
 
       - name: Deploy operator
         run: |
