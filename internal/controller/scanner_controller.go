@@ -72,6 +72,13 @@ var errProbesPending = fmt.Errorf("probe pods not yet running")
 // +kubebuilder:rbac:groups="",resources=events,verbs=create;patch
 // +kubebuilder:rbac:groups=events.k8s.io,resources=events,verbs=create;patch;update
 
+// scanObservedCurrentGeneration reports whether the last completed scan ran
+// against the scanner's current spec generation.
+func scanObservedCurrentGeneration(scannerCR *bpsv1alpha1.BestPracticeScanner) bool {
+	cond := meta.FindStatusCondition(scannerCR.Status.Conditions, bpsv1alpha1.ConditionScanComplete)
+	return cond != nil && cond.ObservedGeneration == scannerCR.Generation
+}
+
 // Reconcile handles a single BestPracticeScanner CR: discovers resources, runs checks, and upserts results.
 func (r *ScannerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
@@ -99,7 +106,9 @@ func (r *ScannerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	// Skip if scan already completed and not yet time for the next one.
 	// This prevents a tight reconcile loop caused by the Owns watch on
 	// BestPracticeResult objects (every create/update triggers re-reconcile).
-	if scannerCR.Status.Phase == bpsv1alpha1.PhaseCompleted && scannerCR.Status.LastScanTime != nil {
+	// A spec change (generation bump) since the last completed scan bypasses
+	// the skip so edits take effect immediately.
+	if scannerCR.Status.Phase == bpsv1alpha1.PhaseCompleted && scannerCR.Status.LastScanTime != nil && scanObservedCurrentGeneration(&scannerCR) {
 		if scanInterval == 0 {
 			return ctrl.Result{}, nil
 		}

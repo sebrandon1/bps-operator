@@ -38,6 +38,8 @@ spec:
 - **checks**: Run only specific checks by name. Omit to run all checks.
 - **suspend**: Set to `true` to pause periodic scanning.
 
+Editing the spec (for example `checks`, `labelSelector`, or `targetNamespace`) on a completed scanner triggers a new scan immediately, for both one-shot and periodic scanners. Metadata-only edits (labels, annotations) do not.
+
 ## Admission Validation
 
 The operator ships a validating webhook for `BestPracticeScanner` resources. On every `CREATE` or `UPDATE`, the webhook enforces:

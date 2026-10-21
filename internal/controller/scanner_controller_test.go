@@ -15,6 +15,7 @@ import (
 	rbacv1 "k8s.io/api/rbac/v1"
 	storagev1 "k8s.io/api/storage/v1"
 	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -486,7 +487,7 @@ func TestReconcile_CompletedOneShotSkipsRescan(t *testing.T) {
 
 	now := metav1.Now()
 	scanner := &bpsv1alpha1.BestPracticeScanner{
-		ObjectMeta: metav1.ObjectMeta{Name: "scanner", Namespace: "ns"},
+		ObjectMeta: metav1.ObjectMeta{Name: "scanner", Namespace: "ns", Generation: 1},
 		Spec: bpsv1alpha1.BestPracticeScannerSpec{
 			Checks: []string{"access-control-pod-host-network"},
 		},
@@ -518,7 +519,7 @@ func TestReconcile_CompletedPeriodicRequeuesWhenNotDue(t *testing.T) {
 
 	now := metav1.Now()
 	scanner := &bpsv1alpha1.BestPracticeScanner{
-		ObjectMeta: metav1.ObjectMeta{Name: "scanner", Namespace: "ns"},
+		ObjectMeta: metav1.ObjectMeta{Name: "scanner", Namespace: "ns", Generation: 1},
 		Spec: bpsv1alpha1.BestPracticeScannerSpec{
 			ScanInterval: "1h",
 			Checks:       []string{"access-control-pod-host-network"},
@@ -546,6 +547,98 @@ func TestReconcile_CompletedPeriodicRequeuesWhenNotDue(t *testing.T) {
 	}
 	if result.RequeueAfter > 1*time.Hour {
 		t.Errorf("expected requeue within 1h, got %v", result.RequeueAfter)
+	}
+}
+
+func TestReconcile_CompletedOneShotRescansOnSpecChange(t *testing.T) {
+	s := newScheme()
+
+	old := metav1.NewTime(time.Now().Add(-time.Hour))
+	scanner := &bpsv1alpha1.BestPracticeScanner{
+		ObjectMeta: metav1.ObjectMeta{Name: "scanner", Namespace: "ns", Generation: 2},
+		Spec: bpsv1alpha1.BestPracticeScannerSpec{
+			Checks: []string{"access-control-pod-host-network"},
+		},
+		Status: bpsv1alpha1.BestPracticeScannerStatus{
+			Phase:        bpsv1alpha1.PhaseCompleted,
+			LastScanTime: &old,
+			Conditions: []metav1.Condition{{
+				Type:               bpsv1alpha1.ConditionScanComplete,
+				Status:             metav1.ConditionTrue,
+				Reason:             bpsv1alpha1.ReasonScanSucceeded,
+				ObservedGeneration: 1,
+				LastTransitionTime: old,
+			}},
+		},
+	}
+
+	c := fake.NewClientBuilder().WithScheme(s).
+		WithObjects(scanner).
+		WithStatusSubresource(scanner).
+		Build()
+
+	r := newReconciler(c, s)
+	if _, err := r.Reconcile(context.Background(), ctrl.Request{
+		NamespacedName: types.NamespacedName{Name: "scanner", Namespace: "ns"},
+	}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var updated bpsv1alpha1.BestPracticeScanner
+	if err := c.Get(context.Background(), types.NamespacedName{Name: "scanner", Namespace: "ns"}, &updated); err != nil {
+		t.Fatalf("get scanner: %v", err)
+	}
+	if !updated.Status.LastScanTime.After(old.Time) {
+		t.Error("expected LastScanTime to advance after spec change")
+	}
+	cond := meta.FindStatusCondition(updated.Status.Conditions, bpsv1alpha1.ConditionScanComplete)
+	if cond == nil || cond.ObservedGeneration != 2 {
+		t.Errorf("expected ScanComplete observedGeneration 2, got %+v", cond)
+	}
+}
+
+func TestReconcile_CompletedPeriodicRescansOnSpecChange(t *testing.T) {
+	s := newScheme()
+
+	recent := metav1.Now()
+	scanner := &bpsv1alpha1.BestPracticeScanner{
+		ObjectMeta: metav1.ObjectMeta{Name: "scanner", Namespace: "ns", Generation: 2},
+		Spec: bpsv1alpha1.BestPracticeScannerSpec{
+			ScanInterval: "1h",
+			Checks:       []string{"access-control-pod-host-network"},
+		},
+		Status: bpsv1alpha1.BestPracticeScannerStatus{
+			Phase:        bpsv1alpha1.PhaseCompleted,
+			LastScanTime: &recent,
+			Conditions: []metav1.Condition{{
+				Type:               bpsv1alpha1.ConditionScanComplete,
+				Status:             metav1.ConditionTrue,
+				Reason:             bpsv1alpha1.ReasonScanSucceeded,
+				ObservedGeneration: 1,
+				LastTransitionTime: recent,
+			}},
+		},
+	}
+
+	c := fake.NewClientBuilder().WithScheme(s).
+		WithObjects(scanner).
+		WithStatusSubresource(scanner).
+		Build()
+
+	r := newReconciler(c, s)
+	if _, err := r.Reconcile(context.Background(), ctrl.Request{
+		NamespacedName: types.NamespacedName{Name: "scanner", Namespace: "ns"},
+	}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var updated bpsv1alpha1.BestPracticeScanner
+	if err := c.Get(context.Background(), types.NamespacedName{Name: "scanner", Namespace: "ns"}, &updated); err != nil {
+		t.Fatalf("get scanner: %v", err)
+	}
+	cond := meta.FindStatusCondition(updated.Status.Conditions, bpsv1alpha1.ConditionScanComplete)
+	if cond == nil || cond.ObservedGeneration != 2 {
+		t.Errorf("expected rescan before interval elapsed (observedGeneration 2), got %+v", cond)
 	}
 }
 
