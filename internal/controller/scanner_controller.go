@@ -11,6 +11,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/discovery"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/scale"
@@ -88,6 +89,7 @@ func (r *ScannerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	if err := r.Get(ctx, req.NamespacedName, &scannerCR); err != nil {
 		if apierrors.IsNotFound(err) {
 			bpsmetrics.DeleteScanner(req.Name, req.Namespace)
+			r.teardownProbeIfUnused(ctx, req.NamespacedName)
 			return ctrl.Result{}, nil
 		}
 		return ctrl.Result{}, err
@@ -131,6 +133,7 @@ func (r *ScannerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 			if err := r.Status().Update(ctx, &scannerCR); err != nil {
 				return ctrl.Result{}, err
 			}
+			r.teardownProbeIfUnused(ctx, req.NamespacedName)
 		}
 		return ctrl.Result{}, nil
 	}
@@ -409,16 +412,56 @@ func (r *ScannerReconciler) completeScan(ctx context.Context, req ctrl.Request, 
 		return ctrl.Result{RequeueAfter: requeueAfter}, nil
 	}
 
-	// One-shot scan completed — tear down the probe DaemonSet
-	if r.OperatorNamespace != "" {
-		if err := probe.DeleteDaemonSet(ctx, r.Client, r.OperatorNamespace); err != nil {
-			logger.Error(err, "Failed to delete probe DaemonSet after one-shot scan")
-		} else {
-			logger.Info("Probe DaemonSet deleted after one-shot scan")
-		}
-	}
+	// One-shot scan completed — tear down the probe DaemonSet unless another scanner still needs it
+	r.teardownProbeIfUnused(ctx, req.NamespacedName)
 
 	return ctrl.Result{}, nil
+}
+
+// probeStillNeeded reports whether any scanner other than self depends on the
+// shared probe DaemonSet: a periodic, unsuspended scanner or one mid-scan.
+func (r *ScannerReconciler) probeStillNeeded(ctx context.Context, self types.NamespacedName) (bool, error) {
+	var scannerList bpsv1alpha1.BestPracticeScannerList
+	if err := r.List(ctx, &scannerList); err != nil {
+		return false, err
+	}
+	for i := range scannerList.Items {
+		other := &scannerList.Items[i]
+		if other.Namespace == self.Namespace && other.Name == self.Name {
+			continue
+		}
+		if other.Status.Phase == bpsv1alpha1.PhaseScanning {
+			return true, nil
+		}
+		if other.Spec.ScanInterval != "" && !other.Spec.Suspend {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+// teardownProbeIfUnused deletes the shared probe DaemonSet unless another
+// scanner still needs it. Failures are logged rather than returned so they
+// never block reconciliation.
+func (r *ScannerReconciler) teardownProbeIfUnused(ctx context.Context, self types.NamespacedName) {
+	if r.OperatorNamespace == "" {
+		return
+	}
+	logger := log.FromContext(ctx)
+	needed, err := r.probeStillNeeded(ctx, self)
+	if err != nil {
+		logger.Error(err, "Failed to check whether other scanners need the probe DaemonSet")
+		return
+	}
+	if needed {
+		logger.Info("Keeping probe DaemonSet; other scanners still depend on it")
+		return
+	}
+	if err := probe.DeleteDaemonSet(ctx, r.Client, r.OperatorNamespace); err != nil {
+		logger.Error(err, "Failed to delete probe DaemonSet")
+		return
+	}
+	logger.Info("Probe DaemonSet deleted; no scanners need it")
 }
 
 func (r *ScannerReconciler) deleteStaleResults(ctx context.Context, scannerCR *bpsv1alpha1.BestPracticeScanner, currentNames map[string]bool) error {

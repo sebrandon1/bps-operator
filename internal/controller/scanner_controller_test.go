@@ -16,6 +16,7 @@ import (
 	rbacv1 "k8s.io/api/rbac/v1"
 	storagev1 "k8s.io/api/storage/v1"
 	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -28,6 +29,7 @@ import (
 	bpsv1alpha1 "github.com/redhat-best-practices-for-k8s/checks-types/api/v1alpha1"
 	checksall "github.com/redhat-best-practices-for-k8s/checks/all"
 	bpsmetrics "github.com/sebrandon1/bps-operator/internal/metrics"
+	"github.com/sebrandon1/bps-operator/internal/probe"
 )
 
 func TestMain(m *testing.M) {
@@ -941,5 +943,97 @@ func TestReconcile_ResultTTL_ZeroDisablesCleanup(t *testing.T) {
 	}
 	if !found {
 		t.Error("result should still exist when TTL is 0 (disabled)")
+	}
+}
+
+func probeDaemonSet() *appsv1.DaemonSet {
+	return &appsv1.DaemonSet{ObjectMeta: metav1.ObjectMeta{Name: probe.ProbeName, Namespace: "operator"}}
+}
+
+func probeExists(t *testing.T, c client.Client) bool {
+	t.Helper()
+	err := c.Get(context.Background(), types.NamespacedName{Name: probe.ProbeName, Namespace: "operator"}, &appsv1.DaemonSet{})
+	if err != nil && !apierrors.IsNotFound(err) {
+		t.Fatalf("get probe DaemonSet: %v", err)
+	}
+	return err == nil
+}
+
+func TestTeardownProbeIfUnused(t *testing.T) {
+	self := types.NamespacedName{Name: "oneshot", Namespace: "ns-a"}
+	oneShot := func(ns, name string) *bpsv1alpha1.BestPracticeScanner {
+		return &bpsv1alpha1.BestPracticeScanner{ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: ns}}
+	}
+	periodic := func(suspend bool) *bpsv1alpha1.BestPracticeScanner {
+		sc := oneShot("ns-b", "periodic")
+		sc.Spec.ScanInterval = "1h"
+		sc.Spec.Suspend = suspend
+		return sc
+	}
+	scanning := oneShot("ns-c", "busy")
+	scanning.Status.Phase = bpsv1alpha1.PhaseScanning
+
+	tests := []struct {
+		name       string
+		others     []client.Object
+		wantExists bool
+	}{
+		{name: "only scanner is deleted", wantExists: false},
+		{name: "other one-shot completed is deleted", others: []client.Object{oneShot("ns-b", "done")}, wantExists: false},
+		{name: "other periodic keeps it", others: []client.Object{periodic(false)}, wantExists: true},
+		{name: "other suspended periodic does not", others: []client.Object{periodic(true)}, wantExists: false},
+		{name: "other scanning keeps it", others: []client.Object{scanning}, wantExists: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s := newScheme()
+			objs := append([]client.Object{probeDaemonSet(), oneShot(self.Namespace, self.Name)}, tt.others...)
+			c := fake.NewClientBuilder().WithScheme(s).WithObjects(objs...).Build()
+			r := newReconciler(c, s)
+			r.OperatorNamespace = "operator"
+
+			r.teardownProbeIfUnused(context.Background(), self)
+
+			if got := probeExists(t, c); got != tt.wantExists {
+				t.Errorf("probe DaemonSet exists = %v, want %v", got, tt.wantExists)
+			}
+		})
+	}
+}
+
+func TestReconcile_NotFoundTearsDownUnusedProbe(t *testing.T) {
+	s := newScheme()
+	c := fake.NewClientBuilder().WithScheme(s).WithObjects(probeDaemonSet()).Build()
+	r := newReconciler(c, s)
+	r.OperatorNamespace = "operator"
+
+	if _, err := r.Reconcile(context.Background(), ctrl.Request{
+		NamespacedName: types.NamespacedName{Name: "gone", Namespace: "ns"},
+	}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if probeExists(t, c) {
+		t.Error("expected probe DaemonSet to be deleted when no scanners remain")
+	}
+}
+
+func TestReconcile_SuspendTearsDownUnusedProbe(t *testing.T) {
+	s := newScheme()
+	scanner := &bpsv1alpha1.BestPracticeScanner{
+		ObjectMeta: metav1.ObjectMeta{Name: "scanner", Namespace: "ns"},
+		Spec:       bpsv1alpha1.BestPracticeScannerSpec{ScanInterval: "1h", Suspend: true},
+		Status:     bpsv1alpha1.BestPracticeScannerStatus{Phase: bpsv1alpha1.PhaseCompleted},
+	}
+	c := fake.NewClientBuilder().WithScheme(s).WithObjects(scanner, probeDaemonSet()).WithStatusSubresource(scanner).Build()
+	r := newReconciler(c, s)
+	r.OperatorNamespace = "operator"
+
+	if _, err := r.Reconcile(context.Background(), ctrl.Request{
+		NamespacedName: types.NamespacedName{Name: "scanner", Namespace: "ns"},
+	}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if probeExists(t, c) {
+		t.Error("expected probe DaemonSet to be deleted after the only scanner is suspended")
 	}
 }

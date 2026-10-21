@@ -35,4 +35,8 @@ The probe runs with elevated privileges to enable checks such as:
 
 Checks that only inspect Kubernetes API objects (pods, services, RBAC, etc.) run directly in the operator without elevated privileges.
 
+### Probe Lifecycle
+
+The `certsuite-probe` DaemonSet is shared by all scanners. It is deleted when a scan finishes, a scanner is suspended, or a scanner is deleted, but only if no other scanner still needs it. Another scanner needs it when it is periodic and not suspended, or is currently scanning. The next scan recreates the DaemonSet if it was removed.
+
 For detailed security documentation, see [internal/probe/daemonset.go](../internal/probe/daemonset.go).
