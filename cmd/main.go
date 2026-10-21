@@ -166,6 +166,11 @@ func run(opts options, cfg *rest.Config) error {
 	if err := mgr.AddReadyzCheck("readyz", healthz.Ping); err != nil {
 		return fmt.Errorf("setting up ready check: %w", err)
 	}
+	if opts.enableWebhook {
+		if err := mgr.AddReadyzCheck("webhook", mgr.GetWebhookServer().StartedChecker()); err != nil {
+			return fmt.Errorf("setting up webhook ready check: %w", err)
+		}
+	}
 
 	setupLog.Info("starting manager")
 	return mgr.Start(ctrl.SetupSignalHandler())

@@ -1,0 +1,21 @@
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: bps-operator-selfsigned-issuer
+  namespace: bps-operator-system
+spec:
+  selfSigned: {}
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: bps-operator-webhook-cert
+  namespace: bps-operator-system
+spec:
+  dnsNames:
+    - bps-operator-webhook-service.bps-operator-system.svc
+    - bps-operator-webhook-service.bps-operator-system.svc.cluster.local
+  issuerRef:
+    kind: Issuer
+    name: bps-operator-selfsigned-issuer
+  secretName: webhook-server-cert

@@ -40,9 +40,25 @@ spec:
 
 ## Admission Validation
 
-The operator ships a validating webhook for `BestPracticeScanner` resources. On every `CREATE` or `UPDATE`, the webhook enforces:
+The operator includes an optional validating webhook for `BestPracticeScanner` resources. It is **disabled by default**: the default `install.yaml` deploys no webhook Service, certificate, or `ValidatingWebhookConfiguration`, so the default install works without cert-manager. When enabled, the webhook runs on every `CREATE` or `UPDATE` and enforces:
 
-- **`spec.scanInterval`**: Must be a valid Go duration string (e.g. `5m`, `1h30m`). Empty (one-shot) is allowed.
-- **`spec.checks`**: Every named check must be a known check identifier. Run `make list-checks` to see valid names.
+- **`spec.scanInterval`**: Must be a valid Go duration string (e.g. `5m`, `1h30m`). Empty (one-shot) is allowed. The CRD schema also enforces this format, so invalid durations are rejected even without the webhook.
+- **`spec.checks`**: Every named check must be a known check identifier. Run `make list-checks` to see valid names. Without the webhook, unknown names are accepted by the API.
 
-Invalid resources are rejected at admission time with a descriptive error message. The webhook has `failurePolicy: Fail`.
+Invalid resources are rejected at admission time with a descriptive error message.
+
+### Enabling the webhook
+
+Deploy the operator first (`make deploy` or `install.yaml`), then opt in with one of the certificate providers:
+
+```bash
+# cert-manager (must already be installed)
+make deploy-webhook
+
+# OpenShift (service-ca operator issues the certificate)
+make deploy-webhook WEBHOOK_VARIANT=openshift
+```
+
+This applies the webhook Service, certificate resources and `ValidatingWebhookConfiguration` from `config/webhook/<variant>/`, waits for the `webhook-server-cert` Secret, and adds `--enable-webhook` to the operator Deployment. The operator reports ready only once the webhook server is serving. `make install-webhook-yaml` renders the same resources to `install-webhook.yaml` (apply it, then run `make enable-webhook`).
+
+The webhook uses `failurePolicy: Ignore`, so scanner create/update keeps working if the webhook Service is unavailable (invalid specs are not rejected during that time). To remove it, run `make undeploy-webhook`.

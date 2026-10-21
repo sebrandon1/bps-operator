@@ -50,6 +50,8 @@ spec:
               name: metrics
             - containerPort: 8081
               name: health
+            - containerPort: 9443
+              name: webhook
           livenessProbe:
             httpGet:
               path: /healthz
@@ -70,6 +72,16 @@ spec:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
             runAsNonRoot: true
+          volumeMounts:
+            - name: webhook-server-cert
+              mountPath: /tmp/k8s-webhook-server/serving-certs
+              readOnly: true
+      volumes:
+        # Only populated when the opt-in webhook is deployed (make deploy-webhook).
+        - name: webhook-server-cert
+          secret:
+            secretName: webhook-server-cert
+            optional: true
 ---
 ---
 apiVersion: apiextensions.k8s.io/v1

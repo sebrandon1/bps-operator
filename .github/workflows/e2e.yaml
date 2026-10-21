@@ -45,3 +45,11 @@ jobs:
           retry_wait_seconds: 60
           command: |
             make test-e2e IMG=quay.io/redhat-best-practices-for-k8s/bps-operator:e2e
+
+      - name: Install cert-manager
+        run: |
+          kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.16.2/cert-manager.yaml
+          kubectl wait --for=condition=Available deployment --all -n cert-manager --timeout=180s
+
+      - name: Run webhook e2e
+        run: make test-e2e-webhook
