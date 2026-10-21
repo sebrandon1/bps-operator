@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus/testutil"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
@@ -26,6 +27,7 @@ import (
 
 	bpsv1alpha1 "github.com/redhat-best-practices-for-k8s/checks-types/api/v1alpha1"
 	checksall "github.com/redhat-best-practices-for-k8s/checks/all"
+	bpsmetrics "github.com/sebrandon1/bps-operator/internal/metrics"
 )
 
 func TestMain(m *testing.M) {
@@ -81,6 +83,29 @@ func TestReconcile_ScannerNotFound(t *testing.T) {
 	}
 	if result.RequeueAfter != 0 {
 		t.Error("unexpected requeue")
+	}
+}
+
+func TestReconcile_ScannerNotFoundDeletesMetrics(t *testing.T) {
+	s := newScheme()
+	c := fake.NewClientBuilder().WithScheme(s).Build()
+
+	bpsmetrics.ScanTotal.WithLabelValues("gone", "test").Inc()
+	bpsmetrics.CheckResults.WithLabelValues("gone", "test", "Compliant").Set(3)
+	before := testutil.CollectAndCount(bpsmetrics.CheckResults, "bps_check_results")
+
+	r := newReconciler(c, s)
+	if _, err := r.Reconcile(context.Background(), ctrl.Request{
+		NamespacedName: types.NamespacedName{Name: "gone", Namespace: "test"},
+	}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if got := testutil.CollectAndCount(bpsmetrics.CheckResults, "bps_check_results"); got != before-1 {
+		t.Errorf("CheckResults series = %d, want %d", got, before-1)
+	}
+	if got := testutil.CollectAndCount(bpsmetrics.ScanTotal, "bps_scans_total"); got != 0 {
+		t.Errorf("ScanTotal series = %d, want 0", got)
 	}
 }
 
