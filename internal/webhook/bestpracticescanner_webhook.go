@@ -3,6 +3,7 @@ package webhook
 import (
 	"context"
 	"fmt"
+	"sync"
 	"time"
 
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -58,11 +59,13 @@ func validateScanInterval(interval string) error {
 	return nil
 }
 
+var registerChecks sync.Once
+
 func validateChecks(checkNames []string) error {
 	if len(checkNames) == 0 {
 		return nil
 	}
-	checksall.Register()
+	registerChecks.Do(checksall.Register)
 	known := make(map[string]bool, len(checks.All()))
 	for _, c := range checks.All() {
 		known[c.Name] = true

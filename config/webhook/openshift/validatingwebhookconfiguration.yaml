@@ -1,0 +1,28 @@
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingWebhookConfiguration
+metadata:
+  name: bps-operator-validating-webhook-configuration
+  annotations:
+    service.beta.openshift.io/inject-cabundle: "true"
+webhooks:
+  - admissionReviewVersions:
+      - v1
+    clientConfig:
+      service:
+        name: bps-operator-webhook-service
+        namespace: bps-operator-system
+        path: /validate-bps-openshift-io-v1alpha1-bestpracticescanner
+    # Ignore keeps scanner CRUD working if the webhook Service is unavailable.
+    failurePolicy: Ignore
+    name: vbestpracticescanner.kb.io
+    rules:
+      - apiGroups:
+          - bps.openshift.io
+        apiVersions:
+          - v1alpha1
+        operations:
+          - CREATE
+          - UPDATE
+        resources:
+          - bestpracticescanners
+    sideEffects: None
