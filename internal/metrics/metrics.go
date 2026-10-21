@@ -44,3 +44,13 @@ var (
 func init() {
 	metrics.Registry.MustRegister(ScanDuration, ScanTotal, CheckResults, CheckDuration)
 }
+
+// DeleteScanner removes every per-scanner series for the given scanner so a
+// deleted scanner stops being reported. Safe to call for scanners that never
+// produced metrics.
+func DeleteScanner(name, namespace string) {
+	labels := prometheus.Labels{"scanner": name, "namespace": namespace}
+	ScanDuration.DeletePartialMatch(labels)
+	ScanTotal.DeletePartialMatch(labels)
+	CheckResults.DeletePartialMatch(labels)
+}

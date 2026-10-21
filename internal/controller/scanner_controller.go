@@ -80,6 +80,7 @@ func (r *ScannerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	var scannerCR bpsv1alpha1.BestPracticeScanner
 	if err := r.Get(ctx, req.NamespacedName, &scannerCR); err != nil {
 		if apierrors.IsNotFound(err) {
+			bpsmetrics.DeleteScanner(req.Name, req.Namespace)
 			return ctrl.Result{}, nil
 		}
 		return ctrl.Result{}, err
