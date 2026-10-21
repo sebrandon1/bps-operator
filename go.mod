@@ -1,6 +1,6 @@
 module github.com/sebrandon1/bps-operator
 
-go 1.27.2
+go 1.27.3
 
 require (
 	github.com/k8snetworkplumbingwg/network-attachment-definition-client v1.7.7
