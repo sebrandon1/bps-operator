@@ -8,7 +8,7 @@ require (
 	github.com/operator-framework/api v0.45.0
 	github.com/operator-framework/operator-lifecycle-manager v0.46.0
 	github.com/prometheus/client_golang v1.25.0
-	github.com/redhat-best-practices-for-k8s/checks v0.0.33
+	github.com/redhat-best-practices-for-k8s/checks v0.0.34
 	github.com/redhat-best-practices-for-k8s/checks-types v1.0.2
 	golang.org/x/sync v0.24.0
 	k8s.io/api v0.37.1
