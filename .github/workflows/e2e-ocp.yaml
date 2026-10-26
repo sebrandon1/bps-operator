@@ -113,6 +113,25 @@ jobs:
           bash .github/scripts/wait-for-crd-established.sh bestpracticeresults.bps.openshift.io
           oc apply -f config/rbac/
 
+          # OpenShift attaches the internal-registry pull secret to a ServiceAccount
+          # asynchronously. Create the SA first and wait for that secret so the
+          # Deployment's first pod is not admitted without imagePullSecrets — pod
+          # imagePullSecrets are immutable, so such a pod stays in ImagePullBackOff
+          # forever ("authentication required").
+          oc create serviceaccount bps-operator-controller-manager -n bps-operator-system 2>/dev/null || true
+          for i in $(seq 1 60); do
+            if oc get serviceaccount bps-operator-controller-manager -n bps-operator-system \
+                 -o jsonpath='{.imagePullSecrets[0].name}' | grep -q .; then
+              echo "ServiceAccount has internal-registry pull secret"
+              break
+            fi
+            if [ "$i" -eq 60 ]; then
+              echo "Timed out waiting for ServiceAccount image pull secret"
+              exit 1
+            fi
+            sleep 1
+          done
+
           # Inject the correct image before applying to avoid a double rollout
           sed -i "s|quay.io/bapalm/bps-operator:latest|$INTERNAL_IMG|g" config/manager/manager.yaml
           oc apply -f config/manager/
