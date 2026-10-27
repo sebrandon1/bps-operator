@@ -1,6 +1,8 @@
 package certification
 
 import (
+	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -9,6 +11,8 @@ import (
 	"time"
 
 	"github.com/redhat-best-practices-for-k8s/checks"
+	"github.com/sebrandon1/go-toolbox/httpx"
+	"github.com/sebrandon1/go-toolbox/retry"
 	"golang.org/x/sync/singleflight"
 )
 
@@ -22,7 +26,7 @@ const defaultBaseURL = "https://catalog.redhat.com/api/containers/v1"
 
 // PyxisValidator implements checks.CertificationValidator using the Red Hat Pyxis API.
 type PyxisValidator struct {
-	httpClient *http.Client
+	httpClient *httpx.Client
 	baseURL    string
 	cacheMu    sync.Mutex
 	cache      map[string]cacheEntry
@@ -45,7 +49,7 @@ func NewPyxisValidator(baseURL string) *PyxisValidator {
 		baseURL = defaultBaseURL
 	}
 	return &PyxisValidator{
-		httpClient: &http.Client{Timeout: 10 * time.Second},
+		httpClient: httpx.NewClient(httpx.Options{Timeout: 10 * time.Second}),
 		baseURL:    baseURL,
 		cache:      make(map[string]cacheEntry),
 		cacheTTL:   certificationCacheTTL,
@@ -108,38 +112,45 @@ func (v *PyxisValidator) cachePyxis(endpoint string, certified bool) {
 
 // fetchPyxis performs the request and reports whether the response is safe to cache.
 func (v *PyxisValidator) fetchPyxis(endpoint string) (bool, bool) {
-	delay := retryBaseDelay
-	for attempt := range retryAttempts {
-		resp, err := v.httpClient.Get(endpoint)
+	var certified, cacheable bool
+
+	// Three total attempts with 500ms/1s backoff, matching the previous loop.
+	_ = retry.Retry(context.Background(), func() error {
+		req, err := v.httpClient.NewRequest(context.Background(), http.MethodGet, endpoint, nil)
 		if err != nil {
-			if attempt < retryAttempts-1 {
-				time.Sleep(delay)
-				delay *= 2
-			}
-			continue
+			return retry.Permanent(err)
 		}
+		resp, err := v.httpClient.Do(req)
+		if err != nil {
+			return err
+		}
+		defer func() { _ = resp.Body.Close() }()
 
 		if resp.StatusCode == http.StatusOK {
-			var result pyxisResponse
-			decodeErr := json.NewDecoder(resp.Body).Decode(&result)
-			_ = resp.Body.Close()
-			if decodeErr != nil {
-				return false, false
+			body, err := httpx.ReadLimited(resp.Body, httpx.DefaultMaxResponseBytes)
+			if err != nil {
+				return retry.Permanent(err)
 			}
-			return len(result.Data) > 0, true
+			var result pyxisResponse
+			if err := httpx.DecodeJSON(bytes.NewReader(body), &result); err != nil {
+				return retry.Permanent(err)
+			}
+			certified = len(result.Data) > 0
+			cacheable = true
+			return nil
 		}
 
-		_ = resp.Body.Close()
 		// Retry on server errors and rate limiting; fail fast on client errors.
-		if resp.StatusCode < 500 && resp.StatusCode != http.StatusTooManyRequests {
-			return false, false
+		if resp.StatusCode >= http.StatusInternalServerError || resp.StatusCode == http.StatusTooManyRequests {
+			return httpx.CheckStatus(resp, nil)
 		}
-		if attempt < retryAttempts-1 {
-			time.Sleep(delay)
-			delay *= 2
-		}
-	}
-	return false, false
+		return retry.Permanent(httpx.CheckStatus(resp, nil))
+	},
+		retry.WithInitialDelay(retryBaseDelay),
+		retry.WithMaxRetries(retryAttempts-1),
+	)
+
+	return certified, cacheable
 }
 
 // IsContainerCertified checks if a container image is certified by digest.
