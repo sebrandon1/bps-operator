@@ -33,6 +33,7 @@ import (
 	"github.com/sebrandon1/bps-operator/internal/controller"
 	"github.com/sebrandon1/bps-operator/internal/probe"
 	"github.com/sebrandon1/bps-operator/internal/webhook"
+	"github.com/sebrandon1/go-toolbox/confkit"
 
 	// Register metrics
 	_ "github.com/sebrandon1/bps-operator/internal/metrics"
@@ -187,12 +188,8 @@ func main() {
 	}
 
 	// Fall back to environment variables when flags are not set
-	if opts.operatorNamespace == "" {
-		opts.operatorNamespace = os.Getenv("OPERATOR_NAMESPACE")
-	}
-	if opts.nodeName == "" {
-		opts.nodeName = os.Getenv("NODE_NAME")
-	}
+	opts.operatorNamespace = confkit.EnvString("OPERATOR_NAMESPACE", opts.operatorNamespace)
+	opts.nodeName = confkit.EnvString("NODE_NAME", opts.nodeName)
 
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&zapOpts)))
 
