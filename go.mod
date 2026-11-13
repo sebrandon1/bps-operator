@@ -11,7 +11,7 @@ require (
 	github.com/redhat-best-practices-for-k8s/checks v0.0.34
 	github.com/redhat-best-practices-for-k8s/checks-types v1.0.2
 	github.com/sebrandon1/go-toolbox v0.1.1
-	golang.org/x/sync v0.24.0
+	golang.org/x/sync v0.25.0
 	k8s.io/api v0.37.2
 	k8s.io/apiextensions-apiserver v0.37.2
 	k8s.io/apimachinery v0.37.2
