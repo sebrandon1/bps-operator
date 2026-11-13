@@ -273,8 +273,8 @@ github.com/redis/go-redis/extra/redisotel/v9 v9.17.3 h1:bF0e3fV7PL0knd1UHDtMud8w
 github.com/redis/go-redis/extra/redisotel/v9 v9.17.3/go.mod h1:gR39sPK/dJZlqgIA9Nm4JFHcQJPyhsISBLj708nrD4w=
 github.com/redis/go-redis/v9 v9.17.3 h1:fN29NdNrE17KttK5Ndf20buqfDZwGNgoUr9qjl1DQx4=
 github.com/redis/go-redis/v9 v9.17.3/go.mod h1:u410H11HMLoB+TP67dz8rL9s6QW2j76l0//kSOd3370=
-github.com/sebrandon1/go-toolbox v0.1.1 h1:6WbRNQsTytriI3ge7ZLFkvTDZhERnAjKfTHTHTko/R4=
-github.com/sebrandon1/go-toolbox v0.1.1/go.mod h1:3ELhcqDngqk0Sq/AAbYpQmJtaQm8nzKfMzoqBRPjWzQ=
+github.com/sebrandon1/go-toolbox v0.1.2 h1:dBDATy6gCNzszWUpV5C4yWf5n+aMwRbhVY+4cbHpWbw=
+github.com/sebrandon1/go-toolbox v0.1.2/go.mod h1:mv+ke07P4yQ/kyTZG/JFgyF71xrW0O8juypeI4zHKO4=
 github.com/secure-systems-lab/go-securesystemslib v0.11.0 h1:iuCR9kcMFD4QurdKrGvPLoKZLv9YvwPYVr0473BdtFs=
 github.com/secure-systems-lab/go-securesystemslib v0.11.0/go.mod h1:+PMOTjUGwHj2vcZ+TFKlb1tXRbrdWE1LYDT5i9JC80Q=
 github.com/sigstore/fulcio v1.8.5 h1:HYTD1/L5wlBp8JxsWxUf8hmfaNBBF/x3r3p5l6tZwbA=
