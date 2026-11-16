@@ -107,23 +107,39 @@ jobs:
           oc apply -f config/rbac/
 
           # OpenShift attaches the internal-registry pull secret to a ServiceAccount
-          # asynchronously. Create the SA first and wait for that secret so the
-          # Deployment's first pod is not admitted without imagePullSecrets — pod
-          # imagePullSecrets are immutable, so such a pod stays in ImagePullBackOff
-          # forever ("authentication required").
-          oc create serviceaccount bps-operator-controller-manager -n bps-operator-system 2>/dev/null || true
-          for i in $(seq 1 60); do
-            if oc get serviceaccount bps-operator-controller-manager -n bps-operator-system \
-                 -o jsonpath='{.imagePullSecrets[0].name}' | grep -q .; then
+          # asynchronously, and under load that can take minutes. Create the SA
+          # first so the Deployment's first pod is admitted with imagePullSecrets —
+          # pod imagePullSecrets are immutable, so a pod created without them stays
+          # in ImagePullBackOff forever ("authentication required"). Give the
+          # cluster controller a bounded chance to inject its secret, then attach
+          # the registry credentials explicitly rather than failing the run.
+          SA=bps-operator-controller-manager
+          NS=bps-operator-system
+          oc create serviceaccount "$SA" -n "$NS" 2>/dev/null || true
+
+          has_pull_secret() {
+            oc get serviceaccount "$SA" -n "$NS" \
+              -o jsonpath='{.imagePullSecrets[0].name}' 2>/dev/null | grep -q .
+          }
+
+          for _ in $(seq 1 60); do
+            if has_pull_secret; then
               echo "ServiceAccount has internal-registry pull secret"
               break
             fi
-            if [ "$i" -eq 60 ]; then
-              echo "Timed out waiting for ServiceAccount image pull secret"
-              exit 1
-            fi
             sleep 1
           done
+
+          if ! has_pull_secret; then
+            echo "ServiceAccount pull secret was not injected after 60s; attaching one explicitly"
+            oc create secret docker-registry internal-registry-pull-secret -n "$NS" \
+              --docker-server=image-registry.openshift-image-registry.svc:5000 \
+              --docker-username=kubeadmin \
+              --docker-password="$(oc whoami -t)" \
+              --dry-run=client -o yaml | oc apply -f -
+            oc secrets link "$SA" internal-registry-pull-secret --for=pull
+            has_pull_secret || { echo "Failed to attach registry pull secret"; exit 1; }
+          fi
 
           # Inject the correct image before applying to avoid a double rollout
           sed -i "s|quay.io/bapalm/bps-operator:latest|$INTERNAL_IMG|g" config/manager/manager.yaml
