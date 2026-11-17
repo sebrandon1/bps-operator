@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.23] - 2026-11-17
+
+### Added
+- One-shot scanners are re-scanned when their spec changes (#195, #205)
+- Deployable validating webhook: Service, serving certificates, and manifests, with corrected documentation (#197)
+- Unit tests for the `BestPracticeScanner` webhook validator (#198)
+
+### Changed
+- The shared probe DaemonSet stays running while any other scanner still needs it (#196)
+- Adopted `github.com/sebrandon1/go-toolbox` for shared helpers (#213, #214)
+- CI retries flaky e2e, checks-qe, and registry push steps (#204) and waits for the OpenShift service-account image pull secret before deploying the operator (#212)
+
+### Fixed
+- Per-scanner Prometheus series are deleted when a scanner is deleted (#199)
+
+### Security
+- Updated Go to 1.27.4 to fix standard library vulnerabilities and to 1.27.3 for GO-2026-6809 (#209, #225)
+
+### Dependencies
+- Updated Kubernetes, `operator-framework/api`, `checks`, `distroless/static`, `golang.org/x/sync`, GitHub Actions, and `go-toolbox` (#208, #210-#224)
+
 ## [0.0.21] - 2026-10-12
 
 ### Security
