@@ -265,8 +265,8 @@ github.com/prometheus/procfs v0.22.0 h1:6q9+/JL9IKAPbCmBrv9n5O5Ty3NKnciV5X7YGw0o
 github.com/prometheus/procfs v0.22.0/go.mod h1:CvmFr/GVhIjIvWJZW3tgkODBQMRIf0EyWMQLHCHab58=
 github.com/redhat-best-practices-for-k8s/checks v0.0.34 h1:siTiCipVgOABoR1tTiA9SnjHol+e4jfbIoYycIP4zq8=
 github.com/redhat-best-practices-for-k8s/checks v0.0.34/go.mod h1:e3BDXX5UWrSP8GUkRGsoTNYiWtBA2PKjq3TzAsLJRKE=
-github.com/redhat-best-practices-for-k8s/checks-types v1.0.2 h1:+pbETGvpU6oZPfaWrAHPNsrCQJcZ5pv0z8TX7Abc6pE=
-github.com/redhat-best-practices-for-k8s/checks-types v1.0.2/go.mod h1:Qc4kTAbSV9VZ68hrOknVm1jL8SVoS9ZpIc4mKNAO/vQ=
+github.com/redhat-best-practices-for-k8s/checks-types v1.0.3 h1:kw/siiu4qQM4my9AOQ5B4iQbPOpVCsxoVzlV4/9PyAc=
+github.com/redhat-best-practices-for-k8s/checks-types v1.0.3/go.mod h1:C82orc6OdQwRPItNq14RP5OQov4d4ROPfb+HtKz6R6U=
 github.com/redis/go-redis/extra/rediscmd/v9 v9.17.3 h1:v9RNP5ynWkruvzscrIoDyyv20c9YeyVn12L9nYnaexw=
 github.com/redis/go-redis/extra/rediscmd/v9 v9.17.3/go.mod h1:gdthSemCkR3WxTmzV2XxYIxClunkUJZAhL0zPHaB0Ww=
 github.com/redis/go-redis/extra/redisotel/v9 v9.17.3 h1:bF0e3fV7PL0knd1UHDtMud8wA7CZt3RSWtyTMhpnWd8=
